@@ -24,7 +24,7 @@ export default function SplashScreen() {
   }, []);
 
   return (
-    <View className="flex-1 bg-background items-center justify-center">
+    <View className="flex-1 bg-background dark:bg-background-dark items-center justify-center">
       <Animated.View
         style={{
           opacity: fadeAnim,
@@ -39,7 +39,7 @@ export default function SplashScreen() {
                 <Stop offset="100%" stopColor="#00d4d4" stopOpacity="0.2" />
               </RadialGradient>
             </Defs>
-            <Circle cx="100" cy="100" r="80" fill="none" stroke="#1a1a1a" strokeWidth="1" />
+            <Circle cx="100" cy="100" r="80" fill="none" stroke="#3a3a3a" strokeWidth="1" />
             {Array.from({ length: 144 }).map((_, i) => {
               const angle = (i / 144) * Math.PI * 2;
               const radius = 70 + Math.sin(angle * 3) * 10;
@@ -62,8 +62,8 @@ export default function SplashScreen() {
       </Animated.View>
 
       <Animated.View style={{ opacity: fadeAnim, marginTop: 40 }}>
-        <Text className="text-foreground text-2xl font-semibold">PROXI APP</Text>
-        <Text className="text-muted-foreground text-sm text-center mt-2">
+        <Text className="text-foreground dark:text-foreground-dark text-2xl font-semibold">PROXI APP</Text>
+        <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm text-center mt-2">
           Reminding you when you&apos;re near
         </Text>
       </Animated.View>
