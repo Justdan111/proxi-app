@@ -7,6 +7,7 @@ import {
   ScrollView,
   SafeAreaView,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -18,8 +19,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { X, MapPin, Plus, Minus, Check } from 'lucide-react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/context/themeContext';
+import * as Location from 'expo-location';
 
 type AddReminderScreenProps = {
   onBack?: () => void;
@@ -27,11 +29,14 @@ type AddReminderScreenProps = {
 
 export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
   const [title, setTitle] = useState('');
-  const [location, setLocation] = useState('Coffee Collective');
+  const [locationName, setLocationName] = useState('');
+  const [locationAddress, setLocationAddress] = useState('');
+  const [isLoadingLocation, setIsLoadingLocation] = useState(true);
   const [radius, setRadius] = useState('100m');
   const [saved, setSaved] = useState(false);
   const router = useRouter();
   const { isDark } = useTheme();
+  const params = useLocalSearchParams<{ selectedLocation?: string; selectedAddress?: string }>();
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -44,6 +49,58 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
   const radiusTranslateY = useSharedValue(20);
   const buttonOpacity = useSharedValue(0);
   const buttonScale = useSharedValue(0.95);
+
+  // Get current location on mount
+  useEffect(() => {
+    getCurrentLocation();
+  }, []);
+
+  // Handle selected location from location-picker
+  useEffect(() => {
+    if (params.selectedLocation) {
+      setLocationName(params.selectedLocation);
+      setLocationAddress(params.selectedAddress || '');
+      setIsLoadingLocation(false);
+    }
+  }, [params.selectedLocation, params.selectedAddress]);
+
+  const getCurrentLocation = async () => {
+    try {
+      setIsLoadingLocation(true);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      
+      if (status !== 'granted') {
+        setLocationName('Location access denied');
+        setLocationAddress('Please enable location permissions');
+        setIsLoadingLocation(false);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      const [address] = await Location.reverseGeocodeAsync({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      if (address) {
+        const name = address.name || address.street || 'Current Location';
+        const addressStr = [address.city, address.region, address.country]
+          .filter(Boolean)
+          .join(', ');
+        setLocationName(name);
+        setLocationAddress(addressStr);
+      } else {
+        setLocationName('Current Location');
+        setLocationAddress('Location found');
+      }
+    } catch (error) {
+      console.error('Error getting location:', error);
+      setLocationName('Unable to get location');
+      setLocationAddress('Tap to select manually');
+    } finally {
+      setIsLoadingLocation(false);
+    }
+  };
 
   useEffect(() => {
     // Staggered entrance animations
@@ -149,25 +206,45 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
               <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold uppercase tracking-[2px]">
                 Location
               </Text>
-              <TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push('/location-picker')}>
                 <Text className="text-accent dark:text-accent-dark text-sm font-bold">
                   Change
                 </Text>
               </TouchableOpacity>
             </View>
-            <View className="flex-row items-center bg-card dark:bg-card-dark px-5 py-4 rounded-2xl">
+            <TouchableOpacity 
+              onPress={() => router.push('/location-picker')}
+              className="flex-row items-center bg-card dark:bg-card-dark px-5 py-4 rounded-2xl"
+            >
               <View className="bg-accent/20 dark:bg-accent-dark/20 rounded-full p-3 mr-4 items-center justify-center">
-                <MapPin size={20} color="#00D4AA" />
+                {isLoadingLocation ? (
+                  <ActivityIndicator size="small" color="#00D4AA" />
+                ) : (
+                  <MapPin size={20} color="#00D4AA" />
+                )}
               </View>
               <View className="flex-1">
-                <Text className="font-bold text-foreground dark:text-foreground-dark text-base mb-1">
-                  {location}
-                </Text>
-                <Text className="text-sm text-muted-foreground dark:text-muted-foreground-dark">
-                Abuja Nigeria
-                </Text>
+                {isLoadingLocation ? (
+                  <>
+                    <Text className="font-bold text-foreground dark:text-foreground-dark text-base mb-1">
+                      Getting location...
+                    </Text>
+                    <Text className="text-sm text-muted-foreground dark:text-muted-foreground-dark">
+                      Please wait
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Text className="font-bold text-foreground dark:text-foreground-dark text-base mb-1">
+                      {locationName}
+                    </Text>
+                    <Text className="text-sm text-muted-foreground dark:text-muted-foreground-dark">
+                      {locationAddress}
+                    </Text>
+                  </>
+                )}
               </View>
-            </View>
+            </TouchableOpacity>
           </Animated.View>
 
           {/* Proximity Radius */}
