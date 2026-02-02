@@ -13,7 +13,6 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withSpring,
-  withDelay,
   Easing,
   FadeInDown,
   FadeIn,
