@@ -4,8 +4,10 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, SafeAreaView, TextInput } from 'react-native';
 import { Plus, MapPin, Clock } from 'lucide-react-native';
 import Animated, { FadeInUp } from 'react-native-reanimated';
+import { useRouter } from 'expo-router';
 
 export default function ExplorerScreen() {
+  const router = useRouter();
   const [reminders, setReminders] = useState<{
     id: string;
     title: string;
@@ -70,15 +72,6 @@ export default function ExplorerScreen() {
         </View>
       </ScrollView>
 
-      {/* Floating Action Button */}
-      <View className="absolute bottom-6 right-6">
-        <TouchableOpacity
-          onPress={addReminder}
-          className="bg-accent rounded-full w-16 h-16 items-center justify-center shadow-lg"
-        >
-          <Plus size={28} color="#000000" />
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 }

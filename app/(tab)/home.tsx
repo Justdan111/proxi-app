@@ -19,11 +19,15 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Search, Bell, MapPin, Plus } from 'lucide-react-native';
 import { reminders as mockReminders } from '@/lib/mockData';
+import { useRouter } from 'expo-router';
+;
+
 
 export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [reminders, setReminders] = useState(mockReminders);
   const [refreshing, setRefreshing] = useState(false);
+  const router = useRouter();
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -100,7 +104,7 @@ export default function HomeScreen() {
             <View className="flex-row items-center">
               <MapPin size={16} className="text-accent dark:text-accent-dark" />
               <Text className="text-accent dark:text-accent-dark text-sm ml-1 font-bold tracking-wider uppercase">
-                Brooklyn, NY
+                Abuja, NG
               </Text>
             </View>
           </View>
@@ -218,15 +222,7 @@ export default function HomeScreen() {
           }
         />
 
-        {/* Floating Action Button */}
-        <Animated.View 
-          entering={FadeIn.delay(600).springify()}
-          className="absolute bottom-6 right-6"
-        >
-          <TouchableOpacity className="bg-accent dark:bg-accent-dark rounded-full p-5 shadow-lg">
-            <Plus size={28} className="text-accent-foreground dark:text-accent-foreground-dark" />
-          </TouchableOpacity>
-        </Animated.View>
+       
       </View>
     </SafeAreaView>
   );

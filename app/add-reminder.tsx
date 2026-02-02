@@ -18,6 +18,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { X, MapPin, Plus, Minus, Check } from 'lucide-react-native';
 import Svg, { Circle } from 'react-native-svg';
+import { useRouter } from 'expo-router';
+import { useTheme } from '@/context/themeContext';
 
 type AddReminderScreenProps = {
   onBack?: () => void;
@@ -28,6 +30,8 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
   const [location, setLocation] = useState('Coffee Collective');
   const [radius, setRadius] = useState('100m');
   const [saved, setSaved] = useState(false);
+  const router = useRouter();
+  const { isDark } = useTheme();
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -97,7 +101,10 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
   const handleSave = () => {
     if (title) {
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setTimeout(() => {
+        setSaved(false);
+        router.back();
+      }, 1500);
     }
   };
 
@@ -107,8 +114,8 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
         <View className="px-6 py-6">
           {/* Header */}
           <Animated.View style={headerAnimatedStyle} className="flex-row items-center justify-between mb-8">
-            <TouchableOpacity onPress={onBack} className="w-10 h-10 items-center justify-center">
-              <X size={24} className="text-foreground dark:text-foreground-dark" />
+            <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 items-center justify-center">
+              <X size={24} color={isDark ? '#00D4AA' : '#1a1a1a'} />
             </TouchableOpacity>
             <Text 
               className="text-foreground dark:text-foreground-dark text-lg font-bold tracking-[3px] uppercase"
@@ -150,14 +157,14 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
             </View>
             <View className="flex-row items-center bg-card dark:bg-card-dark px-5 py-4 rounded-2xl">
               <View className="bg-accent/20 dark:bg-accent-dark/20 rounded-full p-3 mr-4 items-center justify-center">
-                <MapPin size={20} className="text-accent dark:text-accent-dark" />
+                <MapPin size={20} color="#00D4AA" />
               </View>
               <View className="flex-1">
                 <Text className="font-bold text-foreground dark:text-foreground-dark text-base mb-1">
                   {location}
                 </Text>
                 <Text className="text-sm text-muted-foreground dark:text-muted-foreground-dark">
-                  Jægersborggade 10, Copenhagen
+                Abuja Nigeria
                 </Text>
               </View>
             </View>
@@ -240,10 +247,10 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
               {/* Zoom controls */}
               <View className="absolute bottom-4 right-4 gap-2">
                 <TouchableOpacity className="bg-background dark:bg-background-dark rounded-xl p-3 border border-border dark:border-border-dark">
-                  <Plus size={20} className="text-foreground dark:text-foreground-dark" />
+                  <Plus size={20} color={isDark ? '#ffffff' : '#1a1a1a'} />
                 </TouchableOpacity>
                 <TouchableOpacity className="bg-background dark:bg-background-dark rounded-xl p-3 border border-border dark:border-border-dark">
-                  <Minus size={20} className="text-foreground dark:text-foreground-dark" />
+                  <Minus size={20} color={isDark ? '#ffffff' : '#1a1a1a'} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -264,11 +271,8 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
         >
           <Check 
             size={24} 
-            className={
-              !title 
-                ? 'text-muted-foreground dark:text-muted-foreground-dark mr-2' 
-                : 'text-accent-foreground dark:text-accent-foreground-dark mr-2'
-            } 
+            color={!title ? '#6B7280' : (isDark ? '#1a1a1a' : '#ffffff')}
+            style={{ marginRight: 8 }}
           />
           <Text
             className={`font-bold text-lg ${
@@ -283,14 +287,14 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
       </Animated.View>
 
       {/* Success Modal */}
-      <Modal transparent visible={saved} animationType="fade">
+      <Modal transparent visible={saved}  animationType="fade">
         <View className="flex-1 bg-background/80 dark:bg-background-dark/80 items-center justify-center">
           <Animated.View 
             entering={SlideInUp.springify()} 
             className="bg-accent dark:bg-accent-dark rounded-3xl px-8 py-5 items-center mx-6"
           >
             <View className="flex-row items-center">
-              <Check size={24} className="text-accent-foreground dark:text-accent-foreground-dark mr-2" />
+              <Check size={24} color={isDark ? '#1a1a1a' : '#ffffff'} style={{ marginRight: 8 }} />
               <Text className="text-accent-foreground dark:text-accent-foreground-dark font-bold text-xl">
                 Reminder Saved
               </Text>
