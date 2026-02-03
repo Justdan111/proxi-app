@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   Switch,
   Image,
+  Alert,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -54,11 +55,27 @@ export default function SettingsScreen() {
   }));
 
   const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (error) {
-      console.log('[v0] Logout error:', error);
-    }
+    Alert.alert(
+      'Log Out',
+      'Are you sure you want to log out?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Log Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await logout();
+            } catch (error) {
+              console.log('[v0] Logout error:', error);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -201,12 +218,22 @@ export default function SettingsScreen() {
           <Animated.View entering={FadeInDown.delay(600).springify()}>
             <TouchableOpacity
               onPress={handleLogout}
-              className="bg-destructive/10 dark:bg-destructive-dark/10 rounded-full py-4 flex-row items-center justify-center border border-destructive/20 dark:border-destructive-dark/20"
+              className="bg-card dark:bg-card-dark rounded-3xl p-5 border border-border dark:border-border-dark"
             >
-              <LogOut size={20} className="text-destructive dark:text-destructive-dark mr-2" />
-              <Text className="text-destructive dark:text-destructive-dark font-bold text-base tracking-wider uppercase">
-                Log Out
-              </Text>
+              <View className="flex-row items-center">
+                <View className="bg-destructive/10 dark:bg-destructive-dark/10 rounded-2xl p-3 mr-4">
+                  <LogOut size={20} className="text-destructive dark:text-destructive-dark" />
+                </View>
+                <View className="flex-1">
+                  <Text className="font-bold text-destructive dark:text-destructive-dark text-base mb-1">
+                    Log Out
+                  </Text>
+                  <Text className="text-sm text-muted-foreground dark:text-muted-foreground-dark">
+                    Sign out of your account
+                  </Text>
+                </View>
+                <ChevronRight size={20} className="text-muted-foreground dark:text-muted-foreground-dark" />
+              </View>
             </TouchableOpacity>
           </Animated.View>
         </View>

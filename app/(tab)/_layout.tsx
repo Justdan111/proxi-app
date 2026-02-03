@@ -42,7 +42,7 @@ export default function AppLayout() {
             title: 'Explorer',
             tabBarLabel: 'Explorer',
             tabBarIcon: ({ color, size }) => <MapPin color={color} size={size} />,
-            tabBarItemStyle: { marginRight: 30 },
+            tabBarItemStyle: { marginRight: 23 },
           }}
         />
         <Tabs.Screen
@@ -51,7 +51,7 @@ export default function AppLayout() {
             title: 'Activity',
             tabBarLabel: 'Activity',
             tabBarIcon: ({ color, size }) => <Clock color={color} size={size} />,
-            tabBarItemStyle: { marginLeft: 30 },
+            tabBarItemStyle: { marginLeft: 23 },
           }}
         />
         <Tabs.Screen
