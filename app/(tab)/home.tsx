@@ -20,6 +20,7 @@ import Animated, {
 import { Search, Bell, MapPin, Plus } from 'lucide-react-native';
 import { reminders as mockReminders } from '@/lib/mockData';
 import { useRouter } from 'expo-router';
+import { useTheme } from '@/context/themeContext';
 ;
 
 
@@ -27,7 +28,7 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [reminders, setReminders] = useState(mockReminders);
   const [refreshing, setRefreshing] = useState(false);
-  const router = useRouter();
+   const { isDark } = useTheme();
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -102,14 +103,14 @@ export default function HomeScreen() {
               {getGreeting()} 👋
             </Text>
             <View className="flex-row items-center">
-              <MapPin size={16} className="text-accent dark:text-accent-dark" />
+              <MapPin size={16} color={'#00D4AA'} />
               <Text className="text-accent dark:text-accent-dark text-sm ml-1 font-bold tracking-wider uppercase">
                 Abuja, NG
               </Text>
             </View>
           </View>
           <TouchableOpacity className="bg-card dark:bg-card-dark rounded-full p-3 border border-border dark:border-border-dark">
-            <Bell size={22} className="text-foreground dark:text-foreground-dark" />
+            <Bell color={isDark ? '#00D4AA' : '#1a1a1a'}/>
           </TouchableOpacity>
         </Animated.View>
 

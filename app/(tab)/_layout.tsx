@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from 'expo-router';
-import { Home, MapPin, Clock, Settings, Plus } from 'lucide-react-native';
+import { Home, MapPin, Clock, Settings, Plus, BookAIcon } from 'lucide-react-native';
 import { useTheme } from '@/context/themeContext';
 import { View, TouchableOpacity } from 'react-native';
 
@@ -41,7 +41,7 @@ export default function AppLayout() {
           options={{
             title: 'Explorer',
             tabBarLabel: 'Explorer',
-            tabBarIcon: ({ color, size }) => <MapPin color={color} size={size} />,
+            tabBarIcon: ({ color, size }) => <BookAIcon color={color} size={size} />,
             tabBarItemStyle: { marginRight: 23 },
           }}
         />
