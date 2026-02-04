@@ -43,8 +43,8 @@ export const reminders: Reminder[] = [
 ];
 
 export const userLocation = {
-  city: 'Brooklyn',
-  state: 'NY',
-  lat: 40.6782,
-  lng: -73.9442,
+  city: 'Abuja',
+  state: 'FCT',
+  lat: 9.0765,
+  lng: 7.3986,
 };
