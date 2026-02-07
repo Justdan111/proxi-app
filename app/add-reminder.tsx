@@ -142,7 +142,7 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
       setSaved(true);
       setTimeout(() => {
         setSaved(false);
-        router.back(); // Navigate back to home after saving
+        router.replace('/(tab)/home'); // Navigate to home after saving
       }, 1500);
     }
   };
