@@ -15,20 +15,22 @@ import Animated, {
   withSpring,
   Easing,
   FadeInDown,
-  FadeIn,
 } from 'react-native-reanimated';
-import { Search, Bell, MapPin, Plus } from 'lucide-react-native';
-import { reminders as mockReminders } from '@/lib/mockData';
+import { Search, Bell, MapPin, Plus, Check } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/themeContext';
-;
+import { useReminders } from '@/context/reminderContext';
 
 
 export default function HomeScreen() {
   const [search, setSearch] = useState('');
-  const [reminders, setReminders] = useState(mockReminders);
   const [refreshing, setRefreshing] = useState(false);
-   const { isDark } = useTheme();
+  const { isDark } = useTheme();
+  const router = useRouter();
+  const { 
+    reminders, 
+    toggleReminder, 
+  } = useReminders();
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -50,7 +52,7 @@ export default function HomeScreen() {
     setTimeout(() => {
       titleOpacity.value = withTiming(1, { duration: 500 });
     }, 400);
-  }, []);
+  }, [headerOpacity, headerTranslateY, searchOpacity, searchScale, titleOpacity]);
 
   const headerAnimatedStyle = useAnimatedStyle(() => ({
     opacity: headerOpacity.value,
@@ -73,17 +75,12 @@ export default function HomeScreen() {
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
+    // TODO: Fetch reminders from backend
     setTimeout(() => setRefreshing(false), 1000);
   }, []);
 
-  const toggleReminder = (id: string) => {
-    setReminders((prevReminders) =>
-      prevReminders.map((reminder) =>
-        reminder.id === id
-          ? { ...reminder, enabled: !reminder.enabled }
-          : reminder
-      )
-    );
+  const handleToggleReminder = (id: string) => {
+    toggleReminder(id);
   };
 
   const getGreeting = () => {
@@ -97,7 +94,7 @@ export default function HomeScreen() {
     <SafeAreaView className="flex-1 bg-background dark:bg-background-dark">
       <View className="flex-1">
         {/* Header */}
-        <Animated.View style={headerAnimatedStyle} className="px-6 pt-4 pb-6 flex-row items-start justify-between">
+        <Animated.View style={headerAnimatedStyle} className="px-6 pt-4 pb-4 flex-row items-start justify-between">
           <View className="flex-1">
             <Text className="text-foreground dark:text-foreground-dark text-3xl font-bold mb-2">
               {getGreeting()} 👋
@@ -110,12 +107,12 @@ export default function HomeScreen() {
             </View>
           </View>
           <TouchableOpacity className="bg-card dark:bg-card-dark rounded-full p-3 border border-border dark:border-border-dark">
-            <Bell color={isDark ? '#00D4AA' : '#1a1a1a'}/>
+            <Bell color={isDark ? '#00D4AA' : '#1a1a1a'} size={20} />
           </TouchableOpacity>
         </Animated.View>
 
         {/* Search */}
-        <Animated.View style={searchAnimatedStyle} className="px-6 pb-6">
+        <Animated.View style={searchAnimatedStyle} className="px-6 pb-4">
           <View className="flex-row items-center bg-card dark:bg-card-dark rounded-2xl px-5 py-4">
             <Search size={20} className="text-muted-foreground dark:text-muted-foreground-dark" />
             <TextInput
@@ -129,10 +126,16 @@ export default function HomeScreen() {
         </Animated.View>
 
         {/* Active Reminders Title */}
-        <Animated.View style={titleAnimatedStyle} className="px-6 pb-4">
+        <Animated.View style={titleAnimatedStyle} className="px-6 pb-4 flex-row items-center justify-between">
           <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold uppercase tracking-[3px]">
-            Active Proximities
+            Active Proximities ({reminders.filter(r => r.enabled).length})
           </Text>
+          <TouchableOpacity onPress={() => router.push('/add-reminder')}>
+            <View className="flex-row items-center">
+              <Plus size={16} color="#00D4AA" />
+              <Text className="text-accent dark:text-accent-dark text-xs font-bold ml-1">Add New</Text>
+            </View>
+          </TouchableOpacity>
         </Animated.View>
 
         {/* Reminders List */}
@@ -172,7 +175,7 @@ export default function HomeScreen() {
                   
                   {/* Toggle Switch */}
                   <TouchableOpacity
-                    onPress={() => toggleReminder(item.id)}
+                    onPress={() => handleToggleReminder(item.id)}
                     className={`w-14 h-8 rounded-full p-1 ${
                       item.enabled 
                         ? 'bg-accent dark:bg-accent-dark' 
@@ -190,15 +193,30 @@ export default function HomeScreen() {
 
                 {/* Bottom Section */}
                 <View className="flex-row items-center justify-between">
-                  <View className="bg-muted dark:bg-muted-dark px-3 py-1.5 rounded-lg">
-                    <Text className="text-foreground dark:text-foreground-dark text-xs font-bold tracking-wider uppercase">
-                      {item.distance} away
-                    </Text>
+                  <View className="flex-row items-center gap-2">
+                    <View className="bg-muted dark:bg-muted-dark px-3 py-1.5 rounded-lg">
+                      <Text className="text-foreground dark:text-foreground-dark text-xs font-bold tracking-wider uppercase">
+                        {item.distance} away
+                      </Text>
+                    </View>
+                    <View className="bg-accent/10 dark:bg-accent-dark/10 px-3 py-1.5 rounded-lg">
+                      <Text className="text-accent dark:text-accent-dark text-xs font-bold">
+                        {item.radius}m radius
+                      </Text>
+                    </View>
                   </View>
                   <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm italic">
-                    {item.frequency}
+                    {item.frequency === 'once' ? 'Once' : 'Always'}
                   </Text>
                 </View>
+
+                {/* Triggered Badge */}
+                {item.triggered && item.frequency === 'once' && (
+                  <View className="mt-3 bg-green-500/20 px-3 py-2 rounded-lg flex-row items-center">
+                    <Check size={14} color="#22c55e" style={{ marginRight: 6 }} />
+                    <Text className="text-green-500 text-xs font-bold">Completed</Text>
+                  </View>
+                )}
 
                 {/* Disabled State Overlay */}
                 {!item.enabled && (
@@ -215,15 +233,28 @@ export default function HomeScreen() {
           )}
           contentContainerStyle={{ paddingBottom: 100 }}
           ListEmptyComponent={
-            <View className="flex-1 items-center justify-center py-12">
-              <Text className="text-muted-foreground dark:text-muted-foreground-dark text-center">
-                No reminders found
-              </Text>
+            <View className="flex-1 items-center justify-center py-12 px-6">
+              <View className="bg-card dark:bg-card-dark rounded-3xl p-8 items-center w-full">
+                <MapPin size={48} color="#00D4AA" />
+                <Text className="text-foreground dark:text-foreground-dark font-bold text-lg mt-4 mb-2">
+                  No reminders yet
+                </Text>
+                <Text className="text-muted-foreground dark:text-muted-foreground-dark text-center mb-4">
+                  Create your first location-based reminder
+                </Text>
+                <TouchableOpacity 
+                  onPress={() => router.push('/add-reminder')}
+                  className="bg-accent dark:bg-accent-dark px-6 py-3 rounded-full flex-row items-center"
+                >
+                  <Plus size={18} color={isDark ? '#1a1a1a' : '#ffffff'} style={{ marginRight: 6 }} />
+                  <Text className="text-accent-foreground dark:text-accent-foreground-dark font-bold">
+                    Add Reminder
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           }
         />
-
-       
       </View>
     </SafeAreaView>
   );

@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'react-native';
 import { ThemeProvider } from '@/context/themeContext';
 import { AuthProvider } from '@/context/authContext';
+import { ReminderProvider } from '@/context/reminderContext';
 
 
 
@@ -37,8 +38,10 @@ export default function RootLayout() {
     <GestureHandlerRootView className="flex-1">
       <ThemeProvider>
         <AuthProvider>
-          <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
-          <Stack screenOptions={{ headerShown: false }} />
+          <ReminderProvider>
+            <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
+            <Stack screenOptions={{ headerShown: false }} />
+          </ReminderProvider>
         </AuthProvider>
       </ThemeProvider>
     </GestureHandlerRootView>

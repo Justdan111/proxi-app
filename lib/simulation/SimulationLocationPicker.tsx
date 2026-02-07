@@ -20,88 +20,36 @@ import {
   ArrowLeft,
   MapPin,
   Target,
+  ZoomIn,
+  ZoomOut,
+  Crosshair,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/themeContext';
-import Svg, { Circle, G, Line, Rect, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { useReminders, TestLocation } from '@/context/reminderContext';
+import Svg, { Circle, Line, Rect, Text as SvgText, G, Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const MAP_SIZE = SCREEN_WIDTH - 48;
 
-// Map configuration for preview
+// Map configuration for test case
 const MAP_CONFIG = {
+  // Abuja area bounds
   minLat: 9.0300,
   maxLat: 9.1000,
   minLon: 7.3800,
   maxLon: 7.5200,
 };
 
-interface SearchResult {
-  id: string;
-  name: string;
-  address: string;
-  coordinates: {
-    latitude: number;
-    longitude: number;
-  };
-  icon: string;
-}
-
-// Predefined popular locations for demo purposes
-// These will be replaced by Places API search results in production
-const POPULAR_LOCATIONS: SearchResult[] = [
-  {
-    id: '1',
-    name: 'Shell Gas Station',
-    address: 'Wuse II, Abuja',
-    coordinates: { latitude: 9.0820, longitude: 7.4800 },
-    icon: '⛽',
-  },
-  {
-    id: '2',
-    name: 'Shoprite Mall',
-    address: 'Jabi, Abuja',
-    coordinates: { latitude: 9.0650, longitude: 7.4200 },
-    icon: '🛒',
-  },
-  {
-    id: '3',
-    name: 'Transcorp Hilton',
-    address: 'Maitama, Abuja',
-    coordinates: { latitude: 9.0800, longitude: 7.4900 },
-    icon: '🏨',
-  },
-  {
-    id: '4',
-    name: 'National Mosque',
-    address: 'Central Area, Abuja',
-    coordinates: { latitude: 9.0580, longitude: 7.4910 },
-    icon: '🕌',
-  },
-  {
-    id: '5',
-    name: 'Jabi Lake Mall',
-    address: 'Jabi, Abuja',
-    coordinates: { latitude: 9.0700, longitude: 7.4150 },
-    icon: '🏬',
-  },
-  {
-    id: '6',
-    name: 'Wuse Market',
-    address: 'Wuse Zone 5, Abuja',
-    coordinates: { latitude: 9.0750, longitude: 7.4700 },
-    icon: '🛍️',
-  },
-];
-
 export default function LocationPickerScreen() {
   const [search, setSearch] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState<SearchResult | null>(null);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState<TestLocation | null>(null);
+  const [, setMapZoom] = useState(1);
+  const [searchResults, setSearchResults] = useState<TestLocation[]>([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
-  
   const router = useRouter();
   const { isDark } = useTheme();
+  const { currentSimulatedLocation, testLocations: locations } = useReminders();
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -114,13 +62,6 @@ export default function LocationPickerScreen() {
     mapScale.value = withSpring(1, { damping: 12, stiffness: 100 });
   }, []);
 
-  // Convert coordinates to map position
-  const coordsToMapPosition = (lat: number, lon: number) => {
-    const x = ((lon - MAP_CONFIG.minLon) / (MAP_CONFIG.maxLon - MAP_CONFIG.minLon)) * MAP_SIZE;
-    const y = ((MAP_CONFIG.maxLat - lat) / (MAP_CONFIG.maxLat - MAP_CONFIG.minLat)) * MAP_SIZE;
-    return { x, y };
-  };
-
   const headerAnimatedStyle = useAnimatedStyle(() => ({
     opacity: headerOpacity.value,
   }));
@@ -130,15 +71,21 @@ export default function LocationPickerScreen() {
     transform: [{ scale: mapScale.value }],
   }));
 
-  // Search handler - in production, this would call Places API
+  // Convert coordinates to map position
+  const coordsToMapPosition = (lat: number, lon: number) => {
+    const x = ((lon - MAP_CONFIG.minLon) / (MAP_CONFIG.maxLon - MAP_CONFIG.minLon)) * MAP_SIZE;
+    const y = ((MAP_CONFIG.maxLat - lat) / (MAP_CONFIG.maxLat - MAP_CONFIG.minLat)) * MAP_SIZE;
+    return { x, y };
+  };
+
+  // Search handler
   const handleSearch = (text: string) => {
     setSearch(text);
     if (text.length > 0) {
-      // TODO: Replace with actual Places API search
-      // For now, filter from predefined locations
-      const results = POPULAR_LOCATIONS.filter(loc => 
+      const results = locations.filter(loc => 
         loc.name.toLowerCase().includes(text.toLowerCase()) ||
-        loc.address.toLowerCase().includes(text.toLowerCase())
+        loc.address.toLowerCase().includes(text.toLowerCase()) ||
+        loc.category.toLowerCase().includes(text.toLowerCase())
       );
       setSearchResults(results);
       setShowSearchResults(true);
@@ -148,8 +95,8 @@ export default function LocationPickerScreen() {
     }
   };
 
-  // Select location from search
-  const handleSelectLocation = (location: SearchResult) => {
+  // Select location
+  const handleSelectLocation = (location: TestLocation) => {
     setSelectedLocation(location);
     setShowSearchResults(false);
     setSearch(location.name);
@@ -170,6 +117,11 @@ export default function LocationPickerScreen() {
       });
     }
   };
+
+  // Get user position on map
+  const userMapPosition = currentSimulatedLocation 
+    ? coordsToMapPosition(currentSimulatedLocation.latitude, currentSimulatedLocation.longitude)
+    : coordsToMapPosition(9.0765, 7.3986);
 
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-background-dark">
@@ -227,93 +179,161 @@ export default function LocationPickerScreen() {
           )}
         </Animated.View>
 
-        {/* Map Section */}
+        {/* Test Map Section */}
         <Animated.View style={mapAnimatedStyle} entering={FadeInDown.delay(200).springify()} className="mb-6">
           <View className="flex-row items-center justify-between mb-3">
             <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold uppercase tracking-[2px]">
-              Location Preview
+              Test Map View
             </Text>
-            <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs">
-              Select from list below
-            </Text>
+            <View className="flex-row items-center bg-accent/20 dark:bg-accent-dark/20 px-3 py-1 rounded-full">
+              <Crosshair size={12} color="#00D4AA" />
+              <Text className="text-accent dark:text-accent-dark text-xs ml-1 font-bold">SIMULATION MODE</Text>
+            </View>
           </View>
           
           <View className="bg-card dark:bg-card-dark rounded-2xl p-4 border border-border dark:border-border-dark">
             {/* SVG Map */}
-            <Svg width={MAP_SIZE} height={MAP_SIZE} viewBox={`0 0 ${MAP_SIZE} ${MAP_SIZE}`}>
-              <Defs>
-                <LinearGradient id="mapGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <Stop offset="0%" stopColor={isDark ? '#1f2937' : '#f3f4f6'} />
-                  <Stop offset="100%" stopColor={isDark ? '#111827' : '#e5e7eb'} />
-                </LinearGradient>
-              </Defs>
-              
-              {/* Map Background */}
-              <Rect x="0" y="0" width={MAP_SIZE} height={MAP_SIZE} fill="url(#mapGradient)" rx={12} />
-              
-              {/* Grid Lines */}
-              {Array.from({ length: 10 }).map((_, i) => (
-                <G key={`grid-${i}`}>
-                  <Line
-                    x1={0}
-                    y1={(i + 1) * (MAP_SIZE / 10)}
-                    x2={MAP_SIZE}
-                    y2={(i + 1) * (MAP_SIZE / 10)}
-                    stroke={isDark ? '#374151' : '#d1d5db'}
-                    strokeWidth="0.5"
-                    strokeDasharray="4,4"
+            <View className="items-center justify-center">
+              <Svg width={MAP_SIZE} height={MAP_SIZE} viewBox={`0 0 ${MAP_SIZE} ${MAP_SIZE}`}>
+                <Defs>
+                  <LinearGradient id="mapGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <Stop offset="0%" stopColor={isDark ? '#1f2937' : '#f3f4f6'} />
+                    <Stop offset="100%" stopColor={isDark ? '#111827' : '#e5e7eb'} />
+                  </LinearGradient>
+                </Defs>
+                
+                {/* Map Background */}
+                <Rect x="0" y="0" width={MAP_SIZE} height={MAP_SIZE} fill="url(#mapGradient)" rx={12} />
+                
+                {/* Grid Lines */}
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <G key={`grid-${i}`}>
+                    <Line
+                      x1={0}
+                      y1={(i + 1) * (MAP_SIZE / 10)}
+                      x2={MAP_SIZE}
+                      y2={(i + 1) * (MAP_SIZE / 10)}
+                      stroke={isDark ? '#374151' : '#d1d5db'}
+                      strokeWidth="0.5"
+                      strokeDasharray="4,4"
+                    />
+                    <Line
+                      x1={(i + 1) * (MAP_SIZE / 10)}
+                      y1={0}
+                      x2={(i + 1) * (MAP_SIZE / 10)}
+                      y2={MAP_SIZE}
+                      stroke={isDark ? '#374151' : '#d1d5db'}
+                      strokeWidth="0.5"
+                      strokeDasharray="4,4"
+                    />
+                  </G>
+                ))}
+
+                {/* Roads (simplified) */}
+                <Path
+                  d={`M 0 ${MAP_SIZE / 2} L ${MAP_SIZE} ${MAP_SIZE / 2}`}
+                  stroke={isDark ? '#4b5563' : '#9ca3af'}
+                  strokeWidth="6"
+                />
+                <Path
+                  d={`M ${MAP_SIZE / 2} 0 L ${MAP_SIZE / 2} ${MAP_SIZE}`}
+                  stroke={isDark ? '#4b5563' : '#9ca3af'}
+                  strokeWidth="6"
+                />
+                <Path
+                  d={`M ${MAP_SIZE * 0.25} 0 L ${MAP_SIZE * 0.75} ${MAP_SIZE}`}
+                  stroke={isDark ? '#374151' : '#d1d5db'}
+                  strokeWidth="3"
+                />
+
+                {/* Location Markers */}
+                {locations.map(location => {
+                  const pos = coordsToMapPosition(location.coordinates.latitude, location.coordinates.longitude);
+                  const isSelected = selectedLocation?.id === location.id;
+                  
+                  return (
+                    <G key={location.id}>
+                      {/* Marker Shadow */}
+                      <Circle
+                        cx={pos.x}
+                        cy={pos.y + 2}
+                        r={isSelected ? 18 : 14}
+                        fill="rgba(0,0,0,0.2)"
+                      />
+                      {/* Marker Background */}
+                      <Circle
+                        cx={pos.x}
+                        cy={pos.y}
+                        r={isSelected ? 18 : 14}
+                        fill={isSelected ? '#00D4AA' : (isDark ? '#374151' : '#e5e7eb')}
+                        stroke={isSelected ? '#00D4AA' : '#6b7280'}
+                        strokeWidth="2"
+                      />
+                      {/* Marker Icon (using text as placeholder) */}
+                      <SvgText
+                        x={pos.x}
+                        y={pos.y + 5}
+                        textAnchor="middle"
+                        fontSize={isSelected ? 14 : 12}
+                      >
+                        {location.icon}
+                      </SvgText>
+                    </G>
+                  );
+                })}
+
+                {/* User Location */}
+                <G>
+                  {/* User Location Pulse */}
+                  <Circle
+                    cx={userMapPosition.x}
+                    cy={userMapPosition.y}
+                    r={24}
+                    fill="#3B82F6"
+                    fillOpacity={0.2}
                   />
-                  <Line
-                    x1={(i + 1) * (MAP_SIZE / 10)}
-                    y1={0}
-                    x2={(i + 1) * (MAP_SIZE / 10)}
-                    y2={MAP_SIZE}
-                    stroke={isDark ? '#374151' : '#d1d5db'}
-                    strokeWidth="0.5"
-                    strokeDasharray="4,4"
+                  <Circle
+                    cx={userMapPosition.x}
+                    cy={userMapPosition.y}
+                    r={16}
+                    fill="#3B82F6"
+                    fillOpacity={0.3}
+                  />
+                  {/* User Marker */}
+                  <Circle
+                    cx={userMapPosition.x}
+                    cy={userMapPosition.y}
+                    r={10}
+                    fill="#3B82F6"
+                    stroke="#ffffff"
+                    strokeWidth="3"
                   />
                 </G>
-              ))}
+              </Svg>
+            </View>
 
-              {/* Location Markers */}
-              {POPULAR_LOCATIONS.map(location => {
-                const pos = coordsToMapPosition(location.coordinates.latitude, location.coordinates.longitude);
-                const isSelected = selectedLocation?.id === location.id;
-                
-                return (
-                  <G key={location.id}>
-                    {/* Marker Shadow */}
-                    <Circle
-                      cx={pos.x}
-                      cy={pos.y + 2}
-                      r={isSelected ? 18 : 14}
-                      fill="rgba(0,0,0,0.2)"
-                    />
-                    {/* Marker Background */}
-                    <Circle
-                      cx={pos.x}
-                      cy={pos.y}
-                      r={isSelected ? 18 : 14}
-                      fill={isSelected ? '#00D4AA' : (isDark ? '#374151' : '#e5e7eb')}
-                      stroke={isSelected ? '#00D4AA' : '#6b7280'}
-                      strokeWidth={2}
-                    />
-                    {/* Marker Icon */}
-                    <SvgText
-                      x={pos.x}
-                      y={pos.y + 5}
-                      textAnchor="middle"
-                      fontSize={isSelected ? 14 : 12}
-                    >
-                      {location.icon}
-                    </SvgText>
-                  </G>
-                );
-              })}
-            </Svg>
+            {/* Map Controls */}
+            <View className="absolute bottom-6 right-6 gap-2">
+              <TouchableOpacity 
+                onPress={() => setMapZoom(prev => Math.min(prev + 0.2, 2))}
+                className="bg-background dark:bg-background-dark rounded-xl p-3 border border-border dark:border-border-dark"
+              >
+                <ZoomIn size={18} color={isDark ? '#ffffff' : '#1a1a1a'} />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={() => setMapZoom(prev => Math.max(prev - 0.2, 0.5))}
+                className="bg-background dark:bg-background-dark rounded-xl p-3 border border-border dark:border-border-dark"
+              >
+                <ZoomOut size={18} color={isDark ? '#ffffff' : '#1a1a1a'} />
+              </TouchableOpacity>
+            </View>
 
             {/* Map Legend */}
             <View className="flex-row items-center justify-center mt-4 gap-4">
+              <View className="flex-row items-center">
+                <View className="w-3 h-3 rounded-full bg-blue-500 mr-1" />
+                <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs">You</Text>
+              </View>
               <View className="flex-row items-center">
                 <View className="w-3 h-3 rounded-full bg-accent dark:bg-accent-dark mr-1" />
                 <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs">Selected</Text>
@@ -326,14 +346,14 @@ export default function LocationPickerScreen() {
           </View>
         </Animated.View>
 
-        {/* Popular Locations */}
+        {/* Quick Select Locations */}
         <Animated.View entering={FadeInDown.delay(300).springify()} className="mb-6">
           <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold uppercase tracking-[2px] mb-3">
-            Popular Locations
+            Available Test Locations
           </Text>
           
           <View className="gap-2">
-            {POPULAR_LOCATIONS.map((location, index) => (
+            {locations.map((location, index) => (
               <Animated.View
                 key={location.id}
                 entering={FadeInDown.delay(400 + index * 50).springify()}

@@ -18,37 +18,27 @@ export default function WelcomeScreen({ onNavigate }: WelcomeScreenProps) {
   }, [fadeAnim]);
 
   return (
-    <View className="flex-1 bg-background dark:bg-background-dark items-center">
-      {/* Welcome Text */}
-      <Animated.View style={{ opacity: fadeAnim }} className="mt-[120px]">
-        <Text 
-          className="text-foreground dark:text-foreground-dark text-[42px] tracking-[8px] font-normal"
-          style={{ fontFamily: 'Courier' }}
-        >
-          WELCOME
-        </Text>
-      </Animated.View>
-
-      {/* Dotted Circle Pattern */}
-      <Animated.View style={{ opacity: fadeAnim }} className="mt-[60px]">
-        <Svg width={280} height={280} viewBox="0 0 280 280">
-          {Array.from({ length: 25 }).map((_, ring) => {
-            const dotsInRing = Math.floor(20 + ring * 8);
-            const radius = 10 + ring * 10;
+    <View className="flex-1 bg-background dark:bg-background-dark items-center justify-between">
+      {/* Dotted Circle Pattern - Centered */}
+      <Animated.View style={{ opacity: fadeAnim }} className="flex-1 items-center justify-center">
+        <Svg width={350} height={350} viewBox="0 0 350 350">
+          {Array.from({ length: 30 }).map((_, ring) => {
+            const dotsInRing = Math.floor(24 + ring * 6);
+            const radius = 8 + ring * 9;
             
             return Array.from({ length: dotsInRing }).map((_, i) => {
               const angle = (i / dotsInRing) * Math.PI * 2;
-              const x = 140 + Math.cos(angle) * radius;
-              const y = 140 + Math.sin(angle) * radius;
-              const dotOpacity = Math.max(0.15, 1 - (ring / 25) * 0.85);
+              const x = 175 + Math.cos(angle) * radius;
+              const y = 175 + Math.sin(angle) * radius;
+              const dotOpacity = Math.max(0.1, 1 - (ring / 30) * 0.9);
               
               return (
                 <Circle
                   key={`${ring}-${i}`}
                   cx={x}
                   cy={y}
-                  r="1.2"
-                  fill="#22223b"
+                  r="0.8"
+                  fill="#4a4a5e"
                   opacity={dotOpacity}
                 />
               );
@@ -60,35 +50,38 @@ export default function WelcomeScreen({ onNavigate }: WelcomeScreenProps) {
       {/* Bottom Section */}
       <Animated.View 
         style={{ opacity: fadeAnim }} 
-        className="flex-1 justify-end pb-20 w-full px-8"
+        className="pb-12 w-full px-6"
       >
         {/* App Title */}
-        <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm tracking-[3px] text-center mb-4 font-semibold">
-          PROXI APP
+        <Text 
+          className="text-foreground dark:text-foreground-dark text-center mb-3 font-bold"
+          style={{ fontSize: 48, letterSpacing: 4, fontWeight: '800' }}
+        >
+          PROXI
         </Text>
 
         {/* Subtitle */}
-        <Text className="text-foreground dark:text-foreground-dark text-base text-center leading-6 mb-10 opacity-90">
-          Reminding you when you&apos;re near{'\n'}the places that matter.
+        <Text className="text-muted-foreground dark:text-muted-foreground-dark text-base text-center leading-6 mb-16 opacity-70">
+          Smart reminders, right{'\n'}where you need them.
         </Text>
 
-        {/* Sign Up Button */}
+        {/* Get Started Button */}
         <TouchableOpacity
           onPress={() => onNavigate('signup')}
-          className="bg-primary dark:bg-primary-dark rounded-full py-[18px] mb-4 items-center active:opacity-80"
+          className="bg-primary dark:bg-primary-dark rounded-full py-5 mb-4 items-center active:opacity-80"
         >
-          <Text className="text-primary-foreground dark:text-primary-foreground-dark text-base font-semibold tracking-[2px]">
-            SIGN UP
+          <Text className="text-primary-foreground dark:text-primary-foreground-dark text-lg font-semibold">
+            Get Started
           </Text>
         </TouchableOpacity>
 
-        {/* Log In Button */}
+        {/* Sign In Button */}
         <TouchableOpacity
           onPress={() => onNavigate('login')}
-          className="bg-transparent border border-border dark:border-border-dark rounded-full py-[18px] items-center active:opacity-80"
+          className="bg-transparent border border-border dark:border-border-dark rounded-full py-5 items-center active:opacity-80"
         >
-          <Text className="text-foreground dark:text-foreground-dark text-base font-semibold tracking-[2px]">
-            LOG IN
+          <Text className="text-foreground dark:text-foreground-dark text-lg font-medium">
+            Sign In
           </Text>
         </TouchableOpacity>
       </Animated.View>

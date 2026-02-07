@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, TouchableOpacity, SafeAreaView } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -6,25 +6,30 @@ import Animated, {
   withTiming,
   withSpring,
 } from 'react-native-reanimated';
-import { MapPin, Sun, Moon } from 'lucide-react-native';
+import { MapPin } from 'lucide-react-native';
 import Svg, { Circle } from 'react-native-svg';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useTheme } from '@/context/themeContext';
+import { useReminders } from '@/context/reminderContext';
 
-type NotificationScreenProps = {
-  reminderTitle?: string;
-  locationName?: string;
-  distance?: string;
-  onMarkDone?: () => void;
-  onDismiss?: () => void;
-};
+export default function NotificationScreen() {
+  const router = useRouter();
+  const { isDark } = useTheme();
+  const { markReminderTriggered } = useReminders();
+  const params = useLocalSearchParams<{
+    alertId?: string;
+    reminderId?: string;
+    reminderTitle?: string;
+    locationName?: string;
+    distance?: string;
+    icon?: string;
+  }>();
 
-export default function NotificationScreen({
-  reminderTitle = "Don't forget to buy fuel.",
-  locationName = "Shell Gas Station",
-  distance = "0.2 mi away",
-  onMarkDone,
-  onDismiss,
-}: NotificationScreenProps) {
-  const [isDark, setIsDark] = useState(true);
+  const reminderTitle = params.reminderTitle || "Don't forget to buy fuel.";
+  const locationName = params.locationName || "Shell Gas Station";
+  const distance = params.distance || "0m away";
+  const reminderId = params.reminderId || "";
+  const icon = params.icon || "📍";
 
   // Animation values
   const logoScale = useSharedValue(0);
@@ -32,7 +37,6 @@ export default function NotificationScreen({
   const dotsOpacity = useSharedValue(0);
   const cardScale = useSharedValue(0.9);
   const cardOpacity = useSharedValue(0);
-  const themeOpacity = useSharedValue(0);
 
   useEffect(() => {
     // Logo animation
@@ -49,11 +53,6 @@ export default function NotificationScreen({
       cardOpacity.value = withTiming(1, { duration: 500 });
       cardScale.value = withSpring(1, { damping: 12, stiffness: 100 });
     }, 600);
-
-    // Theme buttons fade in
-    setTimeout(() => {
-      themeOpacity.value = withTiming(1, { duration: 500 });
-    }, 1000);
   }, []);
 
   const logoAnimatedStyle = useAnimatedStyle(() => ({
@@ -70,9 +69,17 @@ export default function NotificationScreen({
     transform: [{ scale: cardScale.value }],
   }));
 
-  const themeAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: themeOpacity.value,
-  }));
+  const handleMarkDone = () => {
+    // Mark the reminder as triggered/completed
+    if (reminderId) {
+      markReminderTriggered(reminderId);
+    }
+    router.back();
+  };
+
+  const handleDismiss = () => {
+    router.back();
+  };
 
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-background-dark">
@@ -80,7 +87,7 @@ export default function NotificationScreen({
         {/* Logo */}
         <Animated.View style={logoAnimatedStyle} className="items-center mb-8">
           <View className="bg-accent dark:bg-accent-dark rounded-3xl p-6 mb-4">
-            <MapPin size={48} className="text-accent-foreground dark:text-accent-foreground-dark" />
+            <MapPin size={48} color={isDark ? '#1a1a1a' : '#ffffff'} />
           </View>
           <Text
             className="text-muted-foreground dark:text-muted-foreground-dark text-sm tracking-[4px] uppercase"
@@ -110,7 +117,7 @@ export default function NotificationScreen({
                       cx={x}
                       cy={y}
                       r="1"
-                      fill="#6B7280"
+                      fill={isDark ? '#6B7280' : '#9CA3AF'}
                       opacity={opacity}
                     />
                   );
@@ -119,6 +126,11 @@ export default function NotificationScreen({
               })
             )}
           </Svg>
+        </Animated.View>
+
+        {/* Icon */}
+        <Animated.View style={cardAnimatedStyle} className="mb-4">
+          <Text className="text-6xl">{icon}</Text>
         </Animated.View>
 
         {/* Notification Card */}
@@ -141,11 +153,11 @@ export default function NotificationScreen({
 
           {/* Mark Done Button */}
           <TouchableOpacity
-            onPress={onMarkDone}
-            className="bg-primary dark:bg-primary-dark rounded-full py-4 mb-3 items-center"
+            onPress={handleMarkDone}
+            className="bg-accent dark:bg-accent-dark rounded-full py-4 mb-3 items-center"
           >
             <Text
-              className="text-primary-foreground dark:text-primary-foreground-dark font-bold text-base tracking-[2px] uppercase"
+              className="text-accent-foreground dark:text-accent-foreground-dark font-bold text-base tracking-[2px] uppercase"
               style={{ fontFamily: 'Courier' }}
             >
               Mark Done
@@ -154,7 +166,7 @@ export default function NotificationScreen({
 
           {/* Dismiss Button */}
           <TouchableOpacity
-            onPress={onDismiss}
+            onPress={handleDismiss}
             className="bg-transparent border border-border dark:border-border-dark rounded-full py-4 items-center"
           >
             <Text
@@ -171,47 +183,6 @@ export default function NotificationScreen({
           <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs tracking-wider uppercase">
             📍 {locationName} • {distance}
           </Text>
-        </Animated.View>
-
-        {/* Theme toggle buttons */}
-        <Animated.View
-          style={themeAnimatedStyle}
-          className="absolute bottom-8 right-6 flex-row gap-3"
-        >
-          <TouchableOpacity
-            onPress={() => setIsDark(false)}
-            className={`rounded-full p-4 ${
-              !isDark 
-                ? 'bg-primary dark:bg-primary-dark' 
-                : 'bg-card dark:bg-card-dark border border-border dark:border-border-dark'
-            }`}
-          >
-            <Sun 
-              size={24} 
-              className={
-                !isDark 
-                  ? 'text-primary-foreground dark:text-primary-foreground-dark' 
-                  : 'text-muted-foreground dark:text-muted-foreground-dark'
-              } 
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setIsDark(true)}
-            className={`rounded-full p-4 ${
-              isDark 
-                ? 'bg-card dark:bg-card-dark border-2 border-accent dark:border-accent-dark' 
-                : 'bg-card dark:bg-card-dark border border-border dark:border-border-dark'
-            }`}
-          >
-            <Moon 
-              size={24} 
-              className={
-                isDark 
-                  ? 'text-foreground dark:text-foreground-dark' 
-                  : 'text-muted-foreground dark:text-muted-foreground-dark'
-              } 
-            />
-          </TouchableOpacity>
         </Animated.View>
       </View>
     </SafeAreaView>
