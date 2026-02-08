@@ -5,7 +5,6 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
   withSpring,
-  withSequence,
   Easing,
 } from 'react-native-reanimated';
 import { Eye, EyeOff, ArrowRight, MapPin } from 'lucide-react-native';
