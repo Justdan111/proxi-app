@@ -1,5 +1,3 @@
-
-
 import React, { useEffect } from 'react';
 import { View, Text, Animated } from 'react-native';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
