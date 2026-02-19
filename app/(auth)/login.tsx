@@ -1,5 +1,3 @@
-
-
 import LogInScreen from '@/components/loginScreen';
 import { useRouter, Href } from 'expo-router';
 
