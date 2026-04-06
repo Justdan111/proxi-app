@@ -39,7 +39,8 @@
           }
         }
       ],
-      "expo-maps"
+      "expo-maps",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
