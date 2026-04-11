@@ -1,127 +1,105 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter, Href } from 'expo-router';
+import { router } from 'expo-router';
+import { authApi, User } from '@/lib/api';
+import { getApiError } from '@/lib/api/errors';
 
-type User = {
-  id: string;
-  email: string;
-  name: string;
-};
-
-type AuthContextType = {
-  isLoggedIn: boolean;
-  isLoading: boolean;
+interface AuthContextType {
   user: User | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, name: string) => Promise<void>;
+  signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-};
+  error: string | null;
+  clearError: () => void;
+}
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [user, setUser] = useState<User | null>(null);
-  const router = useRouter();
+  const [user, setUser]         = useState<User | null>(null);
+  const [isLoading, setLoading] = useState(true); // true on mount while checking token
+  const [error, setError]       = useState<string | null>(null);
 
+  // On app start — check if a valid token exists and fetch user profile
   useEffect(() => {
-    const bootstrapAsync = async () => {
+    const bootstrap = async () => {
       try {
-        const savedUser = await AsyncStorage.getItem('@proxi_user');
-        if (savedUser) {
-          setUser(JSON.parse(savedUser));
-          setIsLoggedIn(true);
-          router.replace('/(tab)/home' as Href);
-        } else {
-          router.replace('/(auth)' as Href);
+        const token = await authApi.getToken();
+        if (token) {
+          const me = await authApi.getMe();
+          setUser(me);
         }
-      } catch (e) {
-        console.log('[v0] Failed to restore session:', e);
-        router.replace('/(auth)' as Href);
+      } catch {
+        // Token invalid/expired — clear it
+        await authApi.clearToken();
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     };
-
-    bootstrapAsync();
-  }, [router]);
+    bootstrap();
+  }, []);
 
   const login = async (email: string, password: string) => {
-    setIsLoading(true);
+    setError(null);
+    setLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const newUser = {
-        id: Math.random().toString(36).substr(2, 9),
-        email,
-        name: email.split('@')[0],
-      };
-      setUser(newUser);
-      setIsLoggedIn(true);
-      await AsyncStorage.setItem('@proxi_user', JSON.stringify(newUser));
-      router.replace('/(tab)/home' as Href);
-    } catch (error) {
-      console.log('[v0] Login error:', error);
-      throw error;
+      const result = await authApi.login({ email, password });
+      await authApi.saveToken(result.token);
+      setUser(result.user);
+      router.replace('/(tab)/home');
+    } catch (err) {
+      setError(getApiError(err));
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const signup = async (email: string, password: string, name: string) => {
-    setIsLoading(true);
+  const signup = async (name: string, email: string, password: string) => {
+    setError(null);
+    setLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const newUser = {
-        id: Math.random().toString(36).substr(2, 9),
-        email,
-        name,
-      };
-      setUser(newUser);
-      setIsLoggedIn(true);
-      await AsyncStorage.setItem('@proxi_user', JSON.stringify(newUser));
-      router.replace('/(tab)/home' as Href);
-    } catch (error) {
-      console.log('[v0] Signup error:', error);
-      throw error;
+      const result = await authApi.signup({ name, email, password });
+      await authApi.saveToken(result.token);
+      setUser(result.user);
+      router.replace('/(tab)/home');
+    } catch (err) {
+      setError(getApiError(err));
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   const logout = async () => {
     try {
+      await authApi.logout();
+    } catch {
+      // Ignore logout API errors — always clear locally
+    } finally {
+      await authApi.clearToken();
       setUser(null);
-      setIsLoggedIn(false);
-      await AsyncStorage.removeItem('@proxi_user');
-      router.replace('/(auth)' as Href);
-    } catch (error) {
-      console.log('[v0] Logout error:', error);
-      throw error;
+      router.replace('/login');
     }
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        isLoggedIn,
-        isLoading,
-        user,
-        login,
-        signup,
-        logout,
-      }}
-    >
+    <AuthContext.Provider value={{
+      user,
+      isLoading,
+      isAuthenticated: !!user,
+      login,
+      signup,
+      logout,
+      error,
+      clearError: () => setError(null),
+    }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
+  return ctx;
 }
