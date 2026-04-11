@@ -1,123 +1,135 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-
-export interface Reminder {
-  id: string;
-  title: string;
-  location: string;
-  address: string;
-  distance: string;
-  radius: number;
-  enabled: boolean;
-  icon: string;
-  frequency: 'once' | 'always';
-  timeframe?: {
-    startTime: string;
-    endTime: string;
-  };
-  coordinates: {
-    latitude: number;
-    longitude: number;
-  };
-  createdAt: Date;
-  triggered: boolean;
-}
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { remindersApi, activitiesApi, Reminder, CreateReminderPayload, UpdateReminderPayload } from '@/lib/api';
+import { getApiError } from '@/lib/api/errors';
+import { useAuth } from './authContext';
 
 interface ReminderContextType {
   reminders: Reminder[];
-  addReminder: (reminder: Omit<Reminder, 'id' | 'createdAt' | 'triggered'>) => void;
-  removeReminder: (id: string) => void;
-  toggleReminder: (id: string) => void;
-  updateReminder: (id: string, updates: Partial<Reminder>) => void;
-  markReminderTriggered: (id: string) => void;
+  isLoading: boolean;
+  error: string | null;
+  fetchReminders: () => Promise<void>;
+  createReminder: (payload: CreateReminderPayload) => Promise<Reminder | null>;
+  updateReminder: (id: string, payload: UpdateReminderPayload) => Promise<Reminder | null>;
+  toggleReminder: (id: string) => Promise<void>;
+  deleteReminder: (id: string) => Promise<void>;
 }
 
 const ReminderContext = createContext<ReminderContextType | undefined>(undefined);
 
-export function ReminderProvider({ children }: { children: ReactNode }) {
-  const [reminders, setReminders] = useState<Reminder[]>([
-    // Sample reminders for demo - these will be replaced by backend data
-    {
-      id: '1',
-      title: 'Buy fuel',
-      location: 'Shell Gas Station',
-      address: 'Wuse II, Abuja',
-      distance: '--',
-      radius: 300,
-      enabled: true,
-      icon: '⛽',
-      frequency: 'always',
-      coordinates: { latitude: 9.0820, longitude: 7.4800 },
-      createdAt: new Date(),
-      triggered: false,
-    },
-    {
-      id: '2',
-      title: 'Buy groceries',
-      location: 'Shoprite Mall',
-      address: 'Jabi, Abuja',
-      distance: '--',
-      radius: 500,
-      enabled: true,
-      icon: '🛒',
-      frequency: 'once',
-      coordinates: { latitude: 9.0650, longitude: 7.4200 },
-      createdAt: new Date(),
-      triggered: false,
-    },
-  ]);
+export function ReminderProvider({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useAuth();
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [isLoading, setLoading]   = useState(false);
+  const [error, setError]         = useState<string | null>(null);
 
-  const addReminder = (reminderData: Omit<Reminder, 'id' | 'createdAt' | 'triggered'>) => {
-    const newReminder: Reminder = {
-      ...reminderData,
-      id: `reminder-${Date.now()}`,
-      createdAt: new Date(),
-      triggered: false,
-    };
-    setReminders(prev => [...prev, newReminder]);
-    
-    // TODO: Sync with backend
-    // await api.createReminder(newReminder);
+  const fetchReminders = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await remindersApi.getAll();
+      setReminders(data);
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Auto-fetch when user logs in
+  useEffect(() => {
+    if (isAuthenticated) fetchReminders();
+    else setReminders([]);
+  }, [isAuthenticated, fetchReminders]);
+
+  const createReminder = async (payload: CreateReminderPayload): Promise<Reminder | null> => {
+    setError(null);
+    try {
+      const created = await remindersApi.create(payload);
+      // Optimistic UI — prepend to list immediately
+      setReminders(prev => [created, ...prev]);
+
+      // Log to activity history
+      await activitiesApi.log({
+        reminderId:    created.id,
+        reminderTitle: created.title,
+        location:      created.location,
+        icon:          created.icon,
+        eventType:     'created',
+      });
+
+      return created;
+    } catch (err) {
+      setError(getApiError(err));
+      return null;
+    }
   };
 
-  const removeReminder = (id: string) => {
+  const updateReminder = async (id: string, payload: UpdateReminderPayload): Promise<Reminder | null> => {
+    setError(null);
+    try {
+      const updated = await remindersApi.update(id, payload);
+      setReminders(prev => prev.map(r => r.id === id ? updated : r));
+      return updated;
+    } catch (err) {
+      setError(getApiError(err));
+      return null;
+    }
+  };
+
+  const toggleReminder = async (id: string) => {
+    // Optimistic update — flip locally before API responds
+    setReminders(prev =>
+      prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r)
+    );
+    try {
+      const updated = await remindersApi.toggle(id);
+      // Sync with server's actual state
+      setReminders(prev => prev.map(r => r.id === id ? updated : r));
+
+      await activitiesApi.log({
+        reminderId:    updated.id,
+        reminderTitle: updated.title,
+        location:      updated.location,
+        icon:          updated.icon,
+        eventType:     'toggled',
+      });
+    } catch (err) {
+      // Revert optimistic update on failure
+      setReminders(prev =>
+        prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r)
+      );
+      setError(getApiError(err));
+    }
+  };
+
+  const deleteReminder = async (id: string) => {
+    const snapshot = reminders; // save for rollback
+    // Optimistic remove
     setReminders(prev => prev.filter(r => r.id !== id));
-    
-    // TODO: Sync with backend
-    // await api.deleteReminder(id);
-  };
+    try {
+      const target = snapshot.find(r => r.id === id);
+      await remindersApi.delete(id);
 
-  const toggleReminder = (id: string) => {
-    setReminders(prev => prev.map(r => 
-      r.id === id ? { ...r, enabled: !r.enabled } : r
-    ));
-    
-    // TODO: Sync with backend
-    // await api.updateReminder(id, { enabled: !currentState });
-  };
-
-  const updateReminder = (id: string, updates: Partial<Reminder>) => {
-    setReminders(prev => prev.map(r => 
-      r.id === id ? { ...r, ...updates } : r
-    ));
-    
-    // TODO: Sync with backend
-    // await api.updateReminder(id, updates);
-  };
-
-  const markReminderTriggered = (id: string) => {
-    setReminders(prev => prev.map(r => 
-      r.id === id ? { ...r, triggered: true } : r
-    ));
+      if (target) {
+        await activitiesApi.log({
+          reminderId:    target.id,
+          reminderTitle: target.title,
+          location:      target.location,
+          icon:          target.icon,
+          eventType:     'deleted',
+        });
+      }
+    } catch (err) {
+      setReminders(snapshot); // rollback
+      setError(getApiError(err));
+    }
   };
 
   return (
     <ReminderContext.Provider value={{
-      reminders,
-      addReminder,
-      removeReminder,
-      toggleReminder,
-      updateReminder,
-      markReminderTriggered,
+      reminders, isLoading, error,
+      fetchReminders, createReminder,
+      updateReminder, toggleReminder, deleteReminder,
     }}>
       {children}
     </ReminderContext.Provider>
@@ -125,9 +137,7 @@ export function ReminderProvider({ children }: { children: ReactNode }) {
 }
 
 export function useReminders() {
-  const context = useContext(ReminderContext);
-  if (!context) {
-    throw new Error('useReminders must be used within a ReminderProvider');
-  }
-  return context;
+  const ctx = useContext(ReminderContext);
+  if (!ctx) throw new Error('useReminders must be used inside ReminderProvider');
+  return ctx;
 }
