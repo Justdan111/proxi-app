@@ -1,10 +1,36 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
-// ✅ Swap this for your Railway URL in production
-const BASE_URL = __DEV__
-  ? 'http://localhost:8080'   // local Docker
-  : 'https://your-app.up.railway.app'; // production
+const DEFAULT_PROD_URL = 'https://proxi-api-production.up.railway.app';
+
+function getExpoHost() {
+  const hostUri = Constants.expoConfig?.hostUri;
+  if (!hostUri) return null;
+
+  const host = hostUri.split(':')[0];
+  if (!host) return null;
+  if (host === 'localhost' || host === '127.0.0.1') return null;
+
+  return host;
+}
+
+function resolveBaseUrl() {
+  const configuredUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (configuredUrl) return configuredUrl;
+
+  if (!__DEV__) return DEFAULT_PROD_URL;
+
+  const expoHost = getExpoHost();
+  if (expoHost) return `http://${expoHost}:8080`;
+
+  if (Platform.OS === 'android') return 'http://10.0.2.2:8080';
+
+  return 'http://localhost:8080';
+}
+
+const BASE_URL = resolveBaseUrl();
 
 export const TOKEN_KEY = 'proxi_jwt_token';
 

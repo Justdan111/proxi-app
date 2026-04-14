@@ -1,182 +1,279 @@
-import React, { useEffect } from 'react';
-import { View, Text, ScrollView, SafeAreaView } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
   Easing,
   FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
-import { Check, MapPin, Bell } from 'lucide-react-native';
+import { AlertCircle, Bell, MapPin, RefreshCcw, Trash2 } from 'lucide-react-native';
+import { activitiesApi, Activity } from '@/lib/api';
+import { getApiError } from '@/lib/api/errors';
 
-const activities = [
-  {
-    id: '1',
-    section: 'today',
-    icon: 'check',
-    title: 'Bought fuel at Shell',
-    subtitle: 'Auto-completed at location',
-    time: '10:24 AM',
-    type: 'completed',
+type ActivityGroup = {
+  key: string;
+  label: string;
+  sortTime: number;
+  items: Activity[];
+};
+
+const eventMeta = {
+  triggered: {
+    label: 'Triggered nearby',
+    icon: MapPin,
+    iconClass: 'text-accent dark:text-accent-dark',
+    backgroundClass: 'bg-accent/20 dark:bg-accent-dark/20',
   },
-  {
-    id: '2',
-    section: 'today',
-    icon: 'location',
-    title: 'Visited Coffee Collective',
-    subtitle: 'Stay duration: 45 mins',
-    time: '8:45 AM',
-    type: 'visited',
+  created: {
+    label: 'Reminder created',
+    icon: Bell,
+    iconClass: 'text-accent dark:text-accent-dark',
+    backgroundClass: 'bg-accent/20 dark:bg-accent-dark/20',
   },
-  {
-    id: '3',
-    section: 'yesterday',
-    icon: 'bell',
-    title: 'Groceries at Netto',
-    subtitle: 'Reminder triggered by radius',
-    time: '6:12 PM',
-    type: 'triggered',
+  toggled: {
+    label: 'Reminder toggled',
+    icon: RefreshCcw,
+    iconClass: 'text-accent dark:text-accent-dark',
+    backgroundClass: 'bg-accent/20 dark:bg-accent-dark/20',
   },
-  {
-    id: '4',
-    section: 'yesterday',
-    icon: 'location',
-    title: 'Visited SATS Fitness',
-    subtitle: 'Completed daily goal',
-    time: '4:30 PM',
-    type: 'visited',
+  deleted: {
+    label: 'Reminder deleted',
+    icon: Trash2,
+    iconClass: 'text-rose-500',
+    backgroundClass: 'bg-rose-500/15',
   },
-];
+} as const;
+
+function isSameDay(left: Date, right: Date) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function getSectionLabel(date: Date) {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+
+  if (isSameDay(date, today)) return 'Today';
+  if (isSameDay(date, yesterday)) return 'Yesterday';
+
+  const options: Intl.DateTimeFormatOptions =
+    date.getFullYear() === today.getFullYear()
+      ? { month: 'short', day: 'numeric' }
+      : { month: 'short', day: 'numeric', year: 'numeric' };
+
+  return date.toLocaleDateString(undefined, options);
+}
+
+function formatTime(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'Unknown time';
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function formatDateTime(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return 'Unknown time';
+  return date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
 
 export default function ActivityScreen() {
-  // Animation values
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [isLoading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const headerOpacity = useSharedValue(0);
   const headerTranslateY = useSharedValue(-20);
 
+  const load = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+
+    setError(null);
+
+    try {
+      const data = await activitiesApi.getAll();
+      setActivities(data);
+    } catch (err) {
+      setError(getApiError(err));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
   useEffect(() => {
-    // Header animation
     headerOpacity.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.ease) });
     headerTranslateY.value = withSpring(0, { damping: 15, stiffness: 100 });
-  }, []);
+    load();
+  }, [headerOpacity, headerTranslateY, load]);
+
+  const groupedActivities = useMemo<ActivityGroup[]>(() => {
+    const groups = new Map<string, ActivityGroup>();
+
+    activities
+      .slice()
+      .sort((left, right) => new Date(right.triggeredAt).getTime() - new Date(left.triggeredAt).getTime())
+      .forEach((activity) => {
+        const date = new Date(activity.triggeredAt);
+        const groupLabel = Number.isNaN(date.getTime()) ? 'Recent' : getSectionLabel(date);
+        const groupSortTime = Number.isNaN(date.getTime()) ? 0 : date.getTime();
+        const existing = groups.get(groupLabel);
+
+        if (!existing) {
+          groups.set(groupLabel, {
+            key: groupLabel,
+            label: groupLabel,
+            sortTime: groupSortTime,
+            items: [activity],
+          });
+          return;
+        }
+
+        existing.items.push(activity);
+        existing.sortTime = Math.max(existing.sortTime, groupSortTime);
+      });
+
+    return Array.from(groups.values()).sort((left, right) => right.sortTime - left.sortTime);
+  }, [activities]);
 
   const headerAnimatedStyle = useAnimatedStyle(() => ({
     opacity: headerOpacity.value,
     transform: [{ translateY: headerTranslateY.value }],
   }));
 
-  const getIconComponent = (iconType: string) => {
-    switch (iconType) {
-      case 'check':
-        return <Check size={20} className="text-accent dark:text-accent-dark" />;
-      case 'location':
-        return <MapPin size={20} className="text-accent dark:text-accent-dark" />;
-      case 'bell':
-        return <Bell size={20} className="text-muted-foreground dark:text-muted-foreground-dark" />;
-      default:
-        return <MapPin size={20} className="text-accent dark:text-accent-dark" />;
-    }
+  const renderActivityCard = (activity: Activity, index: number) => {
+    const meta = eventMeta[activity.eventType] ?? eventMeta.created;
+    const Icon = meta.icon;
+    const hasValidDate = !Number.isNaN(new Date(activity.triggeredAt).getTime());
+
+    return (
+      <Animated.View key={activity.id} entering={FadeInDown.delay(index * 80).springify()}>
+        <View className="bg-card dark:bg-card-dark rounded-3xl p-5 border border-border dark:border-border-dark">
+          <View className="flex-row items-start">
+            <View className={`${meta.backgroundClass} rounded-2xl p-3 mr-4`}>
+              <Icon size={20} className={meta.iconClass} />
+            </View>
+
+            <View className="flex-1 mr-3">
+              <Text className="text-foreground dark:text-foreground-dark font-bold text-base mb-1">
+                {activity.reminderTitle}
+              </Text>
+              <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm">
+                {meta.label}{activity.location ? ` · ${activity.location}` : ''}
+              </Text>
+            </View>
+
+            <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs mt-1 text-right">
+              {hasValidDate ? formatTime(activity.triggeredAt) : 'Unknown time'}
+            </Text>
+          </View>
+
+          {hasValidDate && (
+            <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs mt-3">
+              {formatDateTime(activity.triggeredAt)}
+            </Text>
+          )}
+        </View>
+      </Animated.View>
+    );
   };
 
-  const getIconBackground = (iconType: string) => {
-    if (iconType === 'bell') {
-      return 'bg-muted dark:bg-muted-dark';
-    }
-    return 'bg-accent/20 dark:bg-accent-dark/20';
-  };
-
-  // Group activities by section
-  const todayActivities = activities.filter((a) => a.section === 'today');
-  const yesterdayActivities = activities.filter((a) => a.section === 'yesterday');
+  if (isLoading && activities.length === 0) {
+    return (
+      <SafeAreaView className="flex-1 bg-background dark:bg-background-dark">
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator size="large" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-background-dark">
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        <View className="px-6 pt-6 pb-32">
-          {/* Header */}
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#00D4AA" />
+        }
+        contentContainerStyle={{ flexGrow: 1 }}
+      >
+        <View className="px-6 pt-6 pb-32 flex-1">
           <Animated.View style={headerAnimatedStyle} className="mb-8">
             <Text className="text-foreground dark:text-foreground-dark text-4xl font-bold mb-2">
               Activity
             </Text>
+            <Text className="text-muted-foreground dark:text-muted-foreground-dark text-base">
+              Recent reminder history from the API
+            </Text>
           </Animated.View>
 
-          {/* Today Section */}
-          <View className="mb-8">
-            <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold uppercase tracking-[3px] mb-4">
-              Today
-            </Text>
-            <View className="gap-3">
-              {todayActivities.map((activity, index) => (
-                <Animated.View
-                  key={activity.id}
-                  entering={FadeInDown.delay(index * 100).springify()}
+          {error && activities.length === 0 ? (
+            <View className="flex-1 items-center justify-center pt-16">
+              <View className="bg-card dark:bg-card-dark rounded-3xl p-8 border border-border dark:border-border-dark w-full items-center">
+                <AlertCircle size={40} color="#ef4444" />
+                <Text className="text-foreground dark:text-foreground-dark font-bold text-lg mt-4 mb-2 text-center">
+                  Could not load activity
+                </Text>
+                <Text className="text-muted-foreground dark:text-muted-foreground-dark text-center mb-6">
+                  {error}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => load(false)}
+                  className="bg-accent dark:bg-accent-dark px-5 py-3 rounded-full"
                 >
-                  <View className="bg-card dark:bg-card-dark rounded-3xl p-5 border border-border dark:border-border-dark">
-                    <View className="flex-row items-start">
-                      {/* Icon */}
-                      <View className={`${getIconBackground(activity.icon)} rounded-2xl p-3 mr-4`}>
-                        {getIconComponent(activity.icon)}
-                      </View>
-
-                      {/* Content */}
-                      <View className="flex-1 mr-3">
-                        <Text className="text-foreground dark:text-foreground-dark font-bold text-base mb-1">
-                          {activity.title}
-                        </Text>
-                        <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm">
-                          {activity.subtitle}
-                        </Text>
-                      </View>
-
-                      {/* Time */}
-                      <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs mt-1">
-                        {activity.time}
-                      </Text>
-                    </View>
-                  </View>
-                </Animated.View>
-              ))}
+                  <Text className="text-accent-foreground dark:text-accent-foreground-dark font-bold">
+                    Try Again
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-
-          {/* Yesterday Section */}
-          <View className="mb-8">
-            <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold uppercase tracking-[3px] mb-4">
-              Yesterday
-            </Text>
-            <View className="gap-3">
-              {yesterdayActivities.map((activity, index) => (
-                <Animated.View
-                  key={activity.id}
-                  entering={FadeInDown.delay((todayActivities.length + index) * 100).springify()}
-                >
-                  <View className="bg-card dark:bg-card-dark rounded-3xl p-5 border border-border dark:border-border-dark">
-                    <View className="flex-row items-start">
-                      {/* Icon */}
-                      <View className={`${getIconBackground(activity.icon)} rounded-2xl p-3 mr-4`}>
-                        {getIconComponent(activity.icon)}
-                      </View>
-
-                      {/* Content */}
-                      <View className="flex-1 mr-3">
-                        <Text className="text-foreground dark:text-foreground-dark font-bold text-base mb-1">
-                          {activity.title}
-                        </Text>
-                        <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm">
-                          {activity.subtitle}
-                        </Text>
-                      </View>
-
-                      {/* Time */}
-                      <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs mt-1">
-                        {activity.time}
-                      </Text>
-                    </View>
-                  </View>
-                </Animated.View>
-              ))}
+          ) : groupedActivities.length === 0 ? (
+            <View className="flex-1 items-center justify-center pt-16">
+              <View className="bg-card dark:bg-card-dark rounded-3xl p-8 border border-border dark:border-border-dark w-full items-center">
+                <Bell size={40} color="#00D4AA" />
+                <Text className="text-foreground dark:text-foreground-dark font-bold text-lg mt-4 mb-2 text-center">
+                  No activity yet
+                </Text>
+                <Text className="text-muted-foreground dark:text-muted-foreground-dark text-center">
+                  Reminder events will appear here once they are created, updated, triggered, or deleted.
+                </Text>
+              </View>
             </View>
-          </View>
+          ) : (
+            groupedActivities.map((group) => (
+              <View key={group.key} className="mb-8">
+                <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold uppercase tracking-[3px] mb-4">
+                  {group.label}
+                </Text>
+                <View className="gap-3">
+                  {group.items.map((activity, index) => renderActivityCard(activity, index))}
+                </View>
+              </View>
+            ))
+          )}
+
+          {error && activities.length > 0 ? (
+            <View className="mt-2 mb-6 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 flex-row items-start">
+              <AlertCircle size={18} color="#ef4444" style={{ marginTop: 2, marginRight: 10 }} />
+              <Text className="flex-1 text-rose-500 text-sm">{error}</Text>
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     </SafeAreaView>

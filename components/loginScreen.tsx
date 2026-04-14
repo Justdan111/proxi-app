@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -19,9 +19,8 @@ export default function LogInScreen({ onNavigate }: LogInScreenProps) {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, error, clearError } = useAuth();
 
-  // Animation values
   const headerOpacity = useSharedValue(0);
   const headerTranslateY = useSharedValue(-20);
   const emailOpacity = useSharedValue(0);
@@ -34,7 +33,6 @@ export default function LogInScreen({ onNavigate }: LogInScreenProps) {
   const footerTranslateY = useSharedValue(20);
 
   useEffect(() => {
-    // Staggered entrance animations
     headerOpacity.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.ease) });
     headerTranslateY.value = withSpring(0, { damping: 15, stiffness: 100 });
 
@@ -57,7 +55,18 @@ export default function LogInScreen({ onNavigate }: LogInScreenProps) {
       footerOpacity.value = withTiming(1, { duration: 500 });
       footerTranslateY.value = withSpring(0, { damping: 15, stiffness: 100 });
     }, 400);
-  }, []);
+  }, [
+    buttonOpacity,
+    buttonScale,
+    emailOpacity,
+    emailTranslateY,
+    footerOpacity,
+    footerTranslateY,
+    headerOpacity,
+    headerTranslateY,
+    passwordOpacity,
+    passwordTranslateY,
+  ]);
 
   const headerAnimatedStyle = useAnimatedStyle(() => ({
     opacity: headerOpacity.value,
@@ -85,22 +94,23 @@ export default function LogInScreen({ onNavigate }: LogInScreenProps) {
   }));
 
   const handleLogin = async () => {
-    if (email && password) {
-      setLoading(true);
-      try {
-        await login(email, password);
-      } catch (error) {
-        console.log('[v0] Login error:', error);
-      } finally {
-        setLoading(false);
-      }
+    if (!email || !password) return;
+
+    setLoading(true);
+    clearError();
+
+    try {
+      await login(email.trim(), password);
+    } catch (caughtError) {
+      console.log('[v0] Login error:', caughtError);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <ScrollView className="flex-1 bg-background dark:bg-background-dark">
       <View className="flex-1 px-6 pt-16">
-        {/* Header */}
         <Animated.View style={headerAnimatedStyle} className="mb-8">
           <Text className="text-foreground dark:text-foreground-dark text-4xl font-bold mb-3">
             Log In
@@ -110,9 +120,7 @@ export default function LogInScreen({ onNavigate }: LogInScreenProps) {
           </Text>
         </Animated.View>
 
-        {/* Form */}
         <View className="mb-8">
-          {/* Email Field */}
           <Animated.View style={emailAnimatedStyle} className="mb-6">
             <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-semibold uppercase mb-3 tracking-wider">
               EMAIL
@@ -121,7 +129,10 @@ export default function LogInScreen({ onNavigate }: LogInScreenProps) {
               placeholder="hello@example.com"
               placeholderTextColor="#9CA3AF"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(value) => {
+                setEmail(value);
+                if (error) clearError();
+              }}
               keyboardType="email-address"
               autoCapitalize="none"
               className="w-full bg-card dark:bg-card-dark px-4 py-4 text-foreground dark:text-foreground-dark text-base rounded-xl"
@@ -129,7 +140,6 @@ export default function LogInScreen({ onNavigate }: LogInScreenProps) {
             />
           </Animated.View>
 
-          {/* Password Field */}
           <Animated.View style={passwordAnimatedStyle} className="mb-6">
             <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-semibold uppercase mb-3 tracking-wider">
               PASSWORD
@@ -139,15 +149,15 @@ export default function LogInScreen({ onNavigate }: LogInScreenProps) {
                 placeholder="••••••••"
                 placeholderTextColor="#9CA3AF"
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(value) => {
+                  setPassword(value);
+                  if (error) clearError();
+                }}
                 secureTextEntry={!showPassword}
                 className="flex-1 px-4 py-4 text-foreground dark:text-foreground-dark text-base"
                 editable={!loading}
               />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                className="px-4"
-              >
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} className="px-4">
                 {showPassword ? (
                   <Eye size={20} className="text-muted-foreground dark:text-muted-foreground-dark" />
                 ) : (
@@ -158,14 +168,19 @@ export default function LogInScreen({ onNavigate }: LogInScreenProps) {
           </Animated.View>
         </View>
 
-        {/* Continue Button */}
+        {error ? (
+          <View className="mb-6 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3">
+            <Text className="text-rose-500 text-sm">{error}</Text>
+          </View>
+        ) : null}
+
         <Animated.View style={buttonAnimatedStyle}>
           <TouchableOpacity
             onPress={handleLogin}
             disabled={!email || !password || loading}
             className={`w-full rounded-full py-4 items-center mb-6 flex-row justify-center ${
-              !email || !password || loading 
-                ? 'bg-muted dark:bg-muted-dark' 
+              !email || !password || loading
+                ? 'bg-muted dark:bg-muted-dark'
                 : 'bg-primary dark:bg-primary-dark'
             }`}
           >
@@ -179,19 +194,18 @@ export default function LogInScreen({ onNavigate }: LogInScreenProps) {
               {loading ? 'LOGGING IN...' : 'Continue'}
             </Text>
             {!loading && (
-              <ArrowRight 
-                size={20} 
+              <ArrowRight
+                size={20}
                 className={
-                  !email || !password 
-                    ? 'text-muted-foreground dark:text-muted-foreground-dark' 
+                  !email || !password
+                    ? 'text-muted-foreground dark:text-muted-foreground-dark'
                     : 'text-primary-foreground dark:text-primary-foreground-dark'
-                } 
+                }
               />
             )}
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Don't have account */}
         <Animated.View style={buttonAnimatedStyle} className="flex-row justify-center mb-8">
           <Text className="text-muted-foreground dark:text-muted-foreground-dark text-base">
             Don&apos;t have an account?{' '}
@@ -203,7 +217,6 @@ export default function LogInScreen({ onNavigate }: LogInScreenProps) {
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Bottom Info */}
         <Animated.View style={footerAnimatedStyle} className="flex-1 justify-end pb-8">
           <View className="flex-row items-start bg-card dark:bg-card-dark px-4 py-4 rounded-xl">
             <MapPin size={20} className="text-accent dark:text-accent-dark mr-3 mt-0.5" />

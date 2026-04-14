@@ -15,11 +15,12 @@ type SignUpScreenProps = {
 };
 
 export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { signup } = useAuth();
+  const { signup, error, clearError } = useAuth();
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -85,10 +86,11 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
   }));
 
   const handleSignUp = async () => {
-    if (email && password) {
+    if (name && email && password) {
       setLoading(true);
       try {
-        await signup(email, password, '');
+        clearError();
+        await signup(name.trim(), email.trim(), password);
       } catch (error) {
         console.log('[v0] Signup error:', error);
       } finally {
@@ -112,6 +114,22 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
 
         {/* Form */}
         <View className="mb-8">
+          {/* Name Field */}
+          <Animated.View style={emailAnimatedStyle} className="mb-6">
+            <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-semibold uppercase mb-3 tracking-wider">
+              NAME
+            </Text>
+            <TextInput
+              placeholder="Your name"
+              placeholderTextColor="#9CA3AF"
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+              className="w-full bg-card dark:bg-card-dark px-4 py-4 text-foreground dark:text-foreground-dark text-base rounded-xl"
+              editable={!loading}
+            />
+          </Animated.View>
+
           {/* Email Field */}
           <Animated.View style={emailAnimatedStyle} className="mb-6">
             <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-semibold uppercase mb-3 tracking-wider">
@@ -158,20 +176,26 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
           </Animated.View>
         </View>
 
+        {error ? (
+          <View className="mb-6 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3">
+            <Text className="text-rose-500 text-sm">{error}</Text>
+          </View>
+        ) : null}
+
         {/* Continue Button */}
         <Animated.View style={buttonAnimatedStyle}>
           <TouchableOpacity
             onPress={handleSignUp}
-            disabled={!email || !password || loading}
+            disabled={!name || !email || !password || loading}
             className={`w-full rounded-full py-4 items-center mb-6 flex-row justify-center ${
-              !email || !password || loading 
+              !name || !email || !password || loading 
                 ? 'bg-muted dark:bg-muted-dark' 
                 : 'bg-primary dark:bg-primary-dark'
             }`}
           >
             <Text
               className={`font-semibold text-lg mr-2 ${
-                !email || !password || loading
+                !name || !email || !password || loading
                   ? 'text-muted-foreground dark:text-muted-foreground-dark'
                   : 'text-primary-foreground dark:text-primary-foreground-dark'
               }`}
@@ -182,7 +206,7 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
               <ArrowRight 
                 size={20} 
                 className={
-                  !email || !password 
+                  !name || !email || !password 
                     ? 'text-muted-foreground dark:text-muted-foreground-dark' 
                     : 'text-primary-foreground dark:text-primary-foreground-dark'
                 } 
