@@ -18,9 +18,12 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signup, error, clearError } = useAuth();
+
+  const hasPasswordMismatch = confirmPassword.length > 0 && password !== confirmPassword;
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -86,7 +89,7 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
   }));
 
   const handleSignUp = async () => {
-    if (name && email && password) {
+    if (name && email && password && !hasPasswordMismatch) {
       setLoading(true);
       try {
         clearError();
@@ -157,7 +160,10 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
                 placeholder="••••••••"
                 placeholderTextColor="#9CA3AF"
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(value) => {
+                  setPassword(value);
+                  if (error) clearError();
+                }}
                 secureTextEntry={!showPassword}
                 className="flex-1 px-4 py-4 text-foreground dark:text-foreground-dark text-base"
                 editable={!loading}
@@ -174,6 +180,43 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
               </TouchableOpacity>
             </View>
           </Animated.View>
+
+          {/* Confirm Password Field */}
+          <Animated.View style={passwordAnimatedStyle} className="mb-2">
+            <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-semibold uppercase mb-3 tracking-wider">
+              CONFIRM PASSWORD
+            </Text>
+            <View className="flex-row items-center bg-card dark:bg-card-dark rounded-xl">
+              <TextInput
+                placeholder="••••••••"
+                placeholderTextColor="#9CA3AF"
+                value={confirmPassword}
+                onChangeText={(value) => {
+                  setConfirmPassword(value);
+                  if (error) clearError();
+                }}
+                secureTextEntry={!showPassword}
+                className="flex-1 px-4 py-4 text-foreground dark:text-foreground-dark text-base"
+                editable={!loading}
+              />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                className="px-4"
+              >
+                {showPassword ? (
+                  <Eye size={20} className="text-muted-foreground dark:text-muted-foreground-dark" />
+                ) : (
+                  <EyeOff size={20} className="text-muted-foreground dark:text-muted-foreground-dark" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+
+          {hasPasswordMismatch ? (
+            <View className="mb-4">
+              <Text className="text-rose-500 text-sm">Passwords do not match.</Text>
+            </View>
+          ) : null}
         </View>
 
         {error ? (
@@ -186,16 +229,16 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
         <Animated.View style={buttonAnimatedStyle}>
           <TouchableOpacity
             onPress={handleSignUp}
-            disabled={!name || !email || !password || loading}
+            disabled={!name || !email || !password || !confirmPassword || hasPasswordMismatch || loading}
             className={`w-full rounded-full py-4 items-center mb-6 flex-row justify-center ${
-              !name || !email || !password || loading 
+              !name || !email || !password || !confirmPassword || hasPasswordMismatch || loading 
                 ? 'bg-muted dark:bg-muted-dark' 
                 : 'bg-primary dark:bg-primary-dark'
             }`}
           >
             <Text
               className={`font-semibold text-lg mr-2 ${
-                !name || !email || !password || loading
+                !name || !email || !password || !confirmPassword || hasPasswordMismatch || loading
                   ? 'text-muted-foreground dark:text-muted-foreground-dark'
                   : 'text-primary-foreground dark:text-primary-foreground-dark'
               }`}
@@ -206,7 +249,7 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
               <ArrowRight 
                 size={20} 
                 className={
-                  !name || !email || !password 
+                  !name || !email || !password || !confirmPassword || hasPasswordMismatch
                     ? 'text-muted-foreground dark:text-muted-foreground-dark' 
                     : 'text-primary-foreground dark:text-primary-foreground-dark'
                 } 

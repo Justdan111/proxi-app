@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
+  ActivityIndicator,
   View,
   Text,
   FlatList,
@@ -18,19 +19,45 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Search, Bell, MapPin, Plus, Check } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import * as Location from 'expo-location';
 import { useTheme } from '@/context/themeContext';
 import { useReminders } from '@/context/reminderContext';
 
+const EARTH_RADIUS_METERS = 6371000;
+
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function calculateDistanceMeters(
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number }
+) {
+  const latDiff = toRadians(to.latitude - from.latitude);
+  const lonDiff = toRadians(to.longitude - from.longitude);
+
+  const a =
+    Math.sin(latDiff / 2) * Math.sin(latDiff / 2) +
+    Math.cos(toRadians(from.latitude)) *
+      Math.cos(toRadians(to.latitude)) *
+      Math.sin(lonDiff / 2) *
+      Math.sin(lonDiff / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return EARTH_RADIUS_METERS * c;
+}
 
 export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [currentCoordinates, setCurrentCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationLabel, setLocationLabel] = useState('Locating...');
+  const [isLiveTracking, setIsLiveTracking] = useState(false);
+  const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
+  const lastGeocodeAtRef = useRef(0);
   const { isDark } = useTheme();
   const router = useRouter();
-  const { 
-    reminders, 
-    toggleReminder, 
-  } = useReminders();
+  const { reminders, isLoading, error, toggleReminder, fetchReminders } = useReminders();
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -73,11 +100,151 @@ export default function HomeScreen() {
     reminder.location.toLowerCase().includes(search.toLowerCase())
   );
 
-  const onRefresh = React.useCallback(() => {
+  const updateLocationLabel = React.useCallback(
+    async (
+      coordinates: { latitude: number; longitude: number },
+      force = false
+    ) => {
+      const now = Date.now();
+      if (!force && now - lastGeocodeAtRef.current < 60000) return;
+
+      try {
+        const reverse = await Location.reverseGeocodeAsync(coordinates);
+        if (reverse.length > 0) {
+          const first = reverse[0];
+          const city = first.city || first.subregion || first.region;
+          const country = first.isoCountryCode || first.country;
+          setLocationLabel(city && country ? `${city}, ${country}` : city || country || 'Current location');
+        } else {
+          setLocationLabel('Current location');
+        }
+      } catch {
+        setLocationLabel('Current location');
+      } finally {
+        lastGeocodeAtRef.current = now;
+      }
+    },
+    []
+  );
+
+  const applyCoordinates = React.useCallback(
+    (
+      coords: { latitude: number; longitude: number },
+      forceLabelUpdate = false
+    ) => {
+      const nextCoordinates = {
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+      };
+
+      setCurrentCoordinates(nextCoordinates);
+      void updateLocationLabel(nextCoordinates, forceLabelUpdate);
+    },
+    [updateLocationLabel]
+  );
+
+  const refreshCurrentLocation = React.useCallback(async () => {
+    try {
+      const existingPermission = await Location.getForegroundPermissionsAsync();
+      const permission =
+        existingPermission.status === 'granted'
+          ? existingPermission
+          : await Location.requestForegroundPermissionsAsync();
+
+      if (permission.status !== 'granted') {
+        setLocationLabel('Location permission off');
+        setCurrentCoordinates(null);
+        return;
+      }
+
+      const currentPosition = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      applyCoordinates(currentPosition.coords, true);
+    } catch {
+      setLocationLabel('Location unavailable');
+      setCurrentCoordinates(null);
+    }
+  }, [applyCoordinates]);
+
+  const getDistanceLabel = React.useCallback(
+    (item: (typeof reminders)[number]) => {
+      if (!currentCoordinates) return '--';
+
+      const meters = calculateDistanceMeters(currentCoordinates, item.coordinates);
+      if (Number.isNaN(meters)) return '--';
+      if (meters < 1000) return `${Math.round(meters)}m`;
+
+      return `${(meters / 1000).toFixed(1)}km`;
+    },
+    [currentCoordinates]
+  );
+
+  const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
-    // TODO: Fetch reminders from backend
-    setTimeout(() => setRefreshing(false), 1000);
-  }, []);
+    try {
+      await Promise.all([fetchReminders(), refreshCurrentLocation()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchReminders, refreshCurrentLocation]);
+
+  useEffect(() => {
+    refreshCurrentLocation();
+  }, [refreshCurrentLocation]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const startWatching = async () => {
+      try {
+        const existingPermission = await Location.getForegroundPermissionsAsync();
+        const permission =
+          existingPermission.status === 'granted'
+            ? existingPermission
+            : await Location.requestForegroundPermissionsAsync();
+
+        if (!mounted) return;
+
+        if (permission.status !== 'granted') {
+          setIsLiveTracking(false);
+          setLocationLabel('Location permission off');
+          setCurrentCoordinates(null);
+          return;
+        }
+
+        locationSubscriptionRef.current = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            distanceInterval: 25,
+            timeInterval: 15000,
+          },
+          (position) => {
+            if (!mounted) return;
+            applyCoordinates(position.coords);
+          }
+        );
+      } catch {
+        setIsLiveTracking(false);
+        if (!mounted) return;
+        setLocationLabel('Location unavailable');
+      }
+
+      if (mounted) {
+        setIsLiveTracking(!!locationSubscriptionRef.current);
+      }
+    };
+
+    startWatching();
+
+    return () => {
+      mounted = false;
+      locationSubscriptionRef.current?.remove();
+      locationSubscriptionRef.current = null;
+      setIsLiveTracking(false);
+    };
+  }, [applyCoordinates]);
 
   const handleToggleReminder = (id: string) => {
     toggleReminder(id);
@@ -102,8 +269,13 @@ export default function HomeScreen() {
             <View className="flex-row items-center">
               <MapPin size={16} color={'#00D4AA'} />
               <Text className="text-accent dark:text-accent-dark text-sm ml-1 font-bold tracking-wider uppercase">
-                Abuja, NG
+                {locationLabel}
               </Text>
+              {isLiveTracking ? (
+                <View className="ml-2 px-2 py-0.5 rounded-full bg-green-500/15 border border-green-500/30">
+                  <Text className="text-green-500 text-[10px] font-bold tracking-widest uppercase">Live</Text>
+                </View>
+              ) : null}
             </View>
           </View>
           <TouchableOpacity className="bg-card dark:bg-card-dark rounded-full p-3 border border-border dark:border-border-dark">
@@ -196,7 +368,7 @@ export default function HomeScreen() {
                   <View className="flex-row items-center gap-2">
                     <View className="bg-muted dark:bg-muted-dark px-3 py-1.5 rounded-lg">
                       <Text className="text-foreground dark:text-foreground-dark text-xs font-bold tracking-wider uppercase">
-                        {item.distance} away
+                        {getDistanceLabel(item)} away
                       </Text>
                     </View>
                     <View className="bg-accent/10 dark:bg-accent-dark/10 px-3 py-1.5 rounded-lg">
@@ -255,6 +427,21 @@ export default function HomeScreen() {
             </View>
           }
         />
+
+        {isLoading && reminders.length > 0 ? (
+          <View className="absolute top-4 right-6 rounded-full bg-card dark:bg-card-dark px-3 py-1.5 border border-border dark:border-border-dark flex-row items-center">
+            <ActivityIndicator size="small" color="#00D4AA" />
+            <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs ml-2">Syncing</Text>
+          </View>
+        ) : null}
+
+        {error ? (
+          <View className="px-6 pb-4">
+            <View className="rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3">
+              <Text className="text-rose-500 text-sm">{error}</Text>
+            </View>
+          </View>
+        ) : null}
       </View>
     </SafeAreaView>
   );
