@@ -78,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       await authApi.clearToken();
       setUser(null);
-      router.replace('/login');
+      router.replace('/(auth)/login');
     }
   };
 
