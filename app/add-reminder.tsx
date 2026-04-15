@@ -27,9 +27,21 @@ import Svg, { Circle, G, Rect, Text as SvgText, Defs, LinearGradient, Stop } fro
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const MAP_SIZE = SCREEN_WIDTH - 80;
 
+const TIME_24H_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
 type AddReminderScreenProps = {
   onBack?: () => void;
 };
+
+function parseTimeToMinutes(value: string): number | null {
+  const trimmed = value.trim();
+  const match = trimmed.match(TIME_24H_REGEX);
+  if (!match) return null;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  return hours * 60 + minutes;
+}
 
 export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
   const [title, setTitle] = useState('');
@@ -43,9 +55,11 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
   const [startTime, setStartTime] = useState('08:00');
   const [endTime, setEndTime] = useState('20:00');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const router = useRouter();
   const { isDark } = useTheme();
-  const { addReminder } = useReminders();
+  const { createReminder, error: reminderError } = useReminders();
   const params = useLocalSearchParams<{ 
     selectedLocation?: string; 
     selectedAddress?: string;
@@ -87,7 +101,7 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
       buttonOpacity.value = withTiming(1, { duration: 500 });
       buttonScale.value = withSpring(1, { damping: 12, stiffness: 100 });
     }, 400);
-  }, []);
+  }, [buttonOpacity, buttonScale, headerOpacity, headerTranslateY]);
 
   const headerAnimatedStyle = useAnimatedStyle(() => ({
     opacity: headerOpacity.value,
@@ -124,26 +138,69 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
   // Calculate radius in pixels for map display
   const radiusInPixels = (radius / 1000) * (MAP_SIZE / 0.14);
 
-  const handleSave = () => {
-    if (title && locationCoords) {
-      addReminder({
-        title,
-        location: locationName,
-        address: locationAddress,
-        distance: '--',
+  const startMinutes = parseTimeToMinutes(startTime);
+  const endMinutes = parseTimeToMinutes(endTime);
+  const timeframeFormatInvalid = useTimeframe && (startMinutes === null || endMinutes === null);
+  const timeframeRangeInvalid =
+    useTimeframe &&
+    startMinutes !== null &&
+    endMinutes !== null &&
+    startMinutes >= endMinutes;
+  const timeframeError = timeframeFormatInvalid
+    ? 'Use 24-hour format HH:MM (e.g. 08:00, 17:30).'
+    : timeframeRangeInvalid
+      ? 'Start time must be earlier than end time.'
+      : null;
+  const canSave =
+    !!title.trim() &&
+    !!locationCoords &&
+    !!locationName.trim() &&
+    !!locationAddress.trim() &&
+    !saving &&
+    !timeframeError;
+
+  const handleSave = async () => {
+    const trimmedTitle = title.trim();
+    const trimmedLocationName = locationName.trim();
+    const trimmedLocationAddress = locationAddress.trim();
+
+    if (!trimmedTitle || !locationCoords || !trimmedLocationName || !trimmedLocationAddress) {
+      setSaveError('Please add a title and select a valid location before saving.');
+      return;
+    }
+
+    if (timeframeError) {
+      setSaveError(timeframeError);
+      return;
+    }
+
+    setSaving(true);
+    setSaveError(null);
+
+    try {
+      const created = await createReminder({
+        title: trimmedTitle,
+        location: trimmedLocationName,
+        address: trimmedLocationAddress,
         radius,
-        enabled: true,
         icon: locationIcon,
         frequency,
         timeframe: useTimeframe ? { startTime, endTime } : undefined,
         coordinates: locationCoords,
       });
 
+      if (!created) {
+        setSaveError(reminderError || 'Unable to save reminder. Please try again.');
+        return;
+      }
+
       setSaved(true);
       setTimeout(() => {
         setSaved(false);
-        router.replace('/(tab)/home'); // Navigate to home after saving
-      }, 1500);
+        router.replace('/(tab)/home');
+      }, 900);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -326,6 +383,9 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
                     </View>
                   </View>
                 </View>
+                {timeframeError ? (
+                  <Text className="text-rose-500 text-xs mt-3 text-center">{timeframeError}</Text>
+                ) : null}
                 <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs mt-3 text-center">
                   Only trigger notifications during this time
                 </Text>
@@ -448,28 +508,34 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
 
       {/* Save Button */}
       <Animated.View style={buttonAnimatedStyle} className="px-6 pb-8">
+        {saveError ? (
+          <View className="mb-3 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3">
+            <Text className="text-rose-500 text-sm">{saveError}</Text>
+          </View>
+        ) : null}
+
         <TouchableOpacity
           onPress={handleSave}
-          disabled={!title || !locationCoords}
+          disabled={!canSave}
           className={`rounded-full py-5 items-center flex-row justify-center ${
-            !title || !locationCoords
+            !canSave
               ? 'bg-muted dark:bg-muted-dark' 
               : 'bg-accent dark:bg-accent-dark'
           }`}
         >
           <Check 
             size={24} 
-            color={!title || !locationCoords ? '#6B7280' : (isDark ? '#1a1a1a' : '#ffffff')}
+            color={!canSave ? '#6B7280' : (isDark ? '#1a1a1a' : '#ffffff')}
             style={{ marginRight: 8 }}
           />
           <Text
             className={`font-bold text-lg ${
-              !title || !locationCoords
+              !canSave
                 ? 'text-muted-foreground dark:text-muted-foreground-dark' 
                 : 'text-accent-foreground dark:text-accent-foreground-dark'
             }`}
           >
-            Save Reminder
+            {saving ? 'Saving...' : 'Save Reminder'}
           </Text>
         </TouchableOpacity>
       </Animated.View>
