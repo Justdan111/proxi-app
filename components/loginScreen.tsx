@@ -7,6 +7,7 @@ import Animated, {
   withSpring,
   Easing,
 } from 'react-native-reanimated';
+import { useRouter } from 'expo-router';
 import { Eye, EyeOff, ArrowRight, MapPin } from 'lucide-react-native';
 import { useAuth } from '@/context/authContext';
 
@@ -15,6 +16,7 @@ type LogInScreenProps = {
 };
 
 export default function LogInScreen({ onNavigate }: LogInScreenProps) {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -100,7 +102,10 @@ export default function LogInScreen({ onNavigate }: LogInScreenProps) {
     clearError();
 
     try {
-      await login(email.trim(), password);
+      const success = await login(email.trim(), password);
+      if (success) {
+        router.replace('/(tab)/home');
+      }
     } catch (caughtError) {
       console.log('[v0] Login error:', caughtError);
     } finally {

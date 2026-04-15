@@ -7,7 +7,7 @@ interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<boolean>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   error: string | null;
@@ -47,9 +47,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await authApi.login({ email, password });
       await authApi.saveToken(result.token);
       setUser(result.user);
-      router.replace('/(tab)/home');
+      return true;
     } catch (err) {
       setError(getApiError(err));
+      return false;
     } finally {
       setLoading(false);
     }

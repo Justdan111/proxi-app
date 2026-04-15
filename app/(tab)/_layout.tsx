@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from 'expo-router';
-import { Home, MapPin, Clock, Settings, Plus, BookAIcon, Book, BookOpen } from 'lucide-react-native';
+import { Home, Clock, Settings, Plus, BookOpen } from 'lucide-react-native';
 import { useTheme } from '@/context/themeContext';
 import { View, TouchableOpacity } from 'react-native';
 
