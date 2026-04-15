@@ -42,7 +42,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     setError(null);
-    setLoading(true);
     try {
       const result = await authApi.login({ email, password });
       await authApi.saveToken(result.token);
@@ -51,14 +50,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       setError(getApiError(err));
       return false;
-    } finally {
-      setLoading(false);
     }
   };
 
   const signup = async (name: string, email: string, password: string) => {
     setError(null);
-    setLoading(true);
     try {
       const result = await authApi.signup({ name, email, password });
       await authApi.saveToken(result.token);
@@ -66,8 +62,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       router.replace('/(tab)/home');
     } catch (err) {
       setError(getApiError(err));
-    } finally {
-      setLoading(false);
     }
   };
 
