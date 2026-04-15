@@ -1,402 +1,420 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
+  FlatList,
+  ActivityIndicator,
+  StyleSheet,
   SafeAreaView,
-  ScrollView,
-  Dimensions,
 } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  FadeInDown,
-} from 'react-native-reanimated';
-import { 
-  Search,
-  ArrowLeft,
-  MapPin,
-  Target,
-} from 'lucide-react-native';
-import { useRouter } from 'expo-router';
-import { useTheme } from '@/context/themeContext';
-import Svg, { Circle, G, Line, Rect, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { router } from 'expo-router';
+import * as Location from 'expo-location';
+import ReminderMap from '@/components/maps/ReminderMap';
+import { Coordinates } from '@/lib/location/distance';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const MAP_SIZE = SCREEN_WIDTH - 48;
+const GOOGLE_PLACES_KEY = process.env.EXPO_PUBLIC_GOOGLE_PLACES_KEY;
 
-// Map configuration for preview
-const MAP_CONFIG = {
-  minLat: 9.0300,
-  maxLat: 9.1000,
-  minLon: 7.3800,
-  maxLon: 7.5200,
-};
-
-interface SearchResult {
-  id: string;
-  name: string;
-  address: string;
-  coordinates: {
-    latitude: number;
-    longitude: number;
-  };
-  icon: string;
+interface PlacePrediction {
+  place_id: string;
+  description: string;
+  main_text: string;
+  secondary_text: string;
 }
 
-// Predefined popular locations for demo purposes
-// These will be replaced by Places API search results in production
-const POPULAR_LOCATIONS: SearchResult[] = [
-  {
-    id: '1',
-    name: 'Shell Gas Station',
-    address: 'Wuse II, Abuja',
-    coordinates: { latitude: 9.0820, longitude: 7.4800 },
-    icon: '⛽',
-  },
-  {
-    id: '2',
-    name: 'Shoprite Mall',
-    address: 'Jabi, Abuja',
-    coordinates: { latitude: 9.0650, longitude: 7.4200 },
-    icon: '🛒',
-  },
-  {
-    id: '3',
-    name: 'Transcorp Hilton',
-    address: 'Maitama, Abuja',
-    coordinates: { latitude: 9.0800, longitude: 7.4900 },
-    icon: '🏨',
-  },
-  {
-    id: '4',
-    name: 'National Mosque',
-    address: 'Central Area, Abuja',
-    coordinates: { latitude: 9.0580, longitude: 7.4910 },
-    icon: '🕌',
-  },
-  {
-    id: '5',
-    name: 'Jabi Lake Mall',
-    address: 'Jabi, Abuja',
-    coordinates: { latitude: 9.0700, longitude: 7.4150 },
-    icon: '🏬',
-  },
-  {
-    id: '6',
-    name: 'Wuse Market',
-    address: 'Wuse Zone 5, Abuja',
-    coordinates: { latitude: 9.0750, longitude: 7.4700 },
-    icon: '🛍️',
-  },
-];
-
 export default function LocationPickerScreen() {
-  const [search, setSearch] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState<SearchResult | null>(null);
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
-  const [showSearchResults, setShowSearchResults] = useState(false);
-  
-  const router = useRouter();
-  const { isDark } = useTheme();
-
-  // Animation values
-  const headerOpacity = useSharedValue(0);
-  const mapOpacity = useSharedValue(0);
-  const mapScale = useSharedValue(0.95);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<PlacePrediction[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selected, setSelected] = useState<Coordinates | null>(null);
+  const [address, setAddress] = useState('');
+  const [locationName, setLocationName] = useState('');
+  const [locationPermissionMessage, setLocationPermissionMessage] = useState('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    headerOpacity.value = withTiming(1, { duration: 400 });
-    mapOpacity.value = withTiming(1, { duration: 600 });
-    mapScale.value = withSpring(1, { damping: 12, stiffness: 100 });
+    const initCurrentLocation = async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          setLocationPermissionMessage('Location permission denied. You can still search or tap the map to choose a location.');
+          return;
+        }
+
+        setLocationPermissionMessage('');
+
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+
+        const coords = {
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+        };
+
+        setSelected(coords);
+
+        const reverse = await Location.reverseGeocodeAsync(coords);
+        const place = reverse[0];
+        if (place) {
+          const name = place.name || place.street || 'Current Location';
+          const formattedAddress = [place.street, place.city, place.country].filter(Boolean).join(', ');
+          setLocationName(name);
+          setAddress(formattedAddress || name);
+          setQuery(name);
+        }
+      } catch {
+        // Keep picker usable even if location lookup fails.
+        setLocationPermissionMessage('Unable to access your current location. Search or tap the map to continue.');
+      }
+    };
+
+    void initCurrentLocation();
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, []);
 
-  // Convert coordinates to map position
-  const coordsToMapPosition = (lat: number, lon: number) => {
-    const x = ((lon - MAP_CONFIG.minLon) / (MAP_CONFIG.maxLon - MAP_CONFIG.minLon)) * MAP_SIZE;
-    const y = ((MAP_CONFIG.maxLat - lat) / (MAP_CONFIG.maxLat - MAP_CONFIG.minLat)) * MAP_SIZE;
-    return { x, y };
+  const searchPlaces = useCallback(async (text: string) => {
+    if (text.length < 2) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+
+    if (!GOOGLE_PLACES_KEY) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+
+    setSearching(true);
+    try {
+      const url =
+        `https://maps.googleapis.com/maps/api/place/autocomplete/json?` +
+        `input=${encodeURIComponent(text)}&key=${GOOGLE_PLACES_KEY}&language=en`;
+
+      const res = await fetch(url);
+      const json = await res.json();
+
+      const predictions = (json.predictions || []).map((p: any) => ({
+        place_id: p.place_id,
+        description: p.description,
+        main_text: p.structured_formatting?.main_text ?? p.description,
+        secondary_text: p.structured_formatting?.secondary_text ?? '',
+      }));
+
+      setResults(predictions);
+    } catch {
+      setResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }, []);
+
+  const handleQueryChange = (text: string) => {
+    setQuery(text);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      void searchPlaces(text);
+    }, 400);
   };
 
-  const headerAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: headerOpacity.value,
-  }));
+  const selectPlace = async (place: PlacePrediction) => {
+    setQuery(place.main_text);
+    setResults([]);
+    setLocationName(place.main_text);
+    setAddress(place.description);
 
-  const mapAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: mapOpacity.value,
-    transform: [{ scale: mapScale.value }],
-  }));
+    if (!GOOGLE_PLACES_KEY) return;
 
-  // Search handler - in production, this would call Places API
-  const handleSearch = (text: string) => {
-    setSearch(text);
-    if (text.length > 0) {
-      // TODO: Replace with actual Places API search
-      // For now, filter from predefined locations
-      const results = POPULAR_LOCATIONS.filter(loc => 
-        loc.name.toLowerCase().includes(text.toLowerCase()) ||
-        loc.address.toLowerCase().includes(text.toLowerCase())
-      );
-      setSearchResults(results);
-      setShowSearchResults(true);
-    } else {
-      setSearchResults([]);
-      setShowSearchResults(false);
+    try {
+      const url =
+        `https://maps.googleapis.com/maps/api/place/details/json?` +
+        `place_id=${place.place_id}&fields=geometry&key=${GOOGLE_PLACES_KEY}`;
+
+      const res = await fetch(url);
+      const json = await res.json();
+      const loc = json.result?.geometry?.location;
+
+      if (loc) {
+        setSelected({ latitude: loc.lat, longitude: loc.lng });
+      }
+    } catch {
+      // Keep selection text even if details call fails.
     }
   };
 
-  // Select location from search
-  const handleSelectLocation = (location: SearchResult) => {
-    setSelectedLocation(location);
-    setShowSearchResults(false);
-    setSearch(location.name);
+  const handleMapTap = async (coords: Coordinates) => {
+    setSelected(coords);
+    setResults([]);
+    setLocationPermissionMessage('');
+
+    try {
+      const reverse = await Location.reverseGeocodeAsync(coords);
+      const place = reverse[0];
+
+      if (place) {
+        const name = place.name || place.street || 'Selected Location';
+        const addr = [place.street, place.city, place.country].filter(Boolean).join(', ');
+
+        setLocationName(name);
+        setAddress(addr || name);
+        setQuery(name);
+      }
+    } catch {
+      // Allow manual map selection even if reverse geocoding fails.
+      setLocationName('Selected Location');
+      setAddress('');
+      setQuery('Selected Location');
+    }
   };
 
-  // Confirm selection and navigate back
   const confirmSelection = () => {
-    if (selectedLocation) {
-      router.push({
-        pathname: '/add-reminder',
-        params: {
-          selectedLocation: selectedLocation.name,
-          selectedAddress: selectedLocation.address,
-          selectedLat: selectedLocation.coordinates.latitude.toString(),
-          selectedLon: selectedLocation.coordinates.longitude.toString(),
-          selectedIcon: selectedLocation.icon,
-        },
-      });
-    }
+    if (!selected) return;
+
+    router.push({
+      pathname: '/add-reminder',
+      params: {
+        selectedLat: String(selected.latitude),
+        selectedLon: String(selected.longitude),
+        selectedAddress: address,
+        selectedLocation: locationName || query || 'Selected Location',
+      },
+    });
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-background dark:bg-background-dark">
-      {/* Header */}
-      <Animated.View style={headerAnimatedStyle} className="flex-row items-center px-6 py-4">
-        <TouchableOpacity 
-          onPress={() => router.back()}
-          className="w-10 h-10 items-center justify-center"
-        >
-          <ArrowLeft size={24} color={isDark ? '#ffffff' : '#1a1a1a'} />
-        </TouchableOpacity>
-        <Text className="flex-1 text-center text-foreground dark:text-foreground-dark text-lg font-bold tracking-[2px] uppercase">
-          Select Location
-        </Text>
-        <View className="w-10" />
-      </Animated.View>
-
-      <ScrollView className="flex-1 px-6" showsVerticalScrollIndicator={false}>
-        {/* Search Bar */}
-        <Animated.View entering={FadeInDown.delay(100).springify()} className="mb-4 relative z-20">
-          <View className="flex-row items-center bg-card dark:bg-card-dark rounded-2xl px-5 py-4 border border-border dark:border-border-dark">
-            <Search size={20} color={isDark ? '#9CA3AF' : '#6B7280'} />
-            <TextInput
-              placeholder="Search locations..."
-              placeholderTextColor="#6B7280"
-              value={search}
-              onChangeText={handleSearch}
-              className="flex-1 ml-3 text-foreground dark:text-foreground-dark text-base"
-            />
-            {search.length > 0 && (
-              <TouchableOpacity onPress={() => handleSearch('')}>
-                <Text className="text-accent dark:text-accent-dark font-bold">Clear</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          
-          {/* Search Results Dropdown */}
-          {showSearchResults && searchResults.length > 0 && (
-            <View className="absolute top-full left-0 right-0 bg-card dark:bg-card-dark rounded-2xl mt-2 border border-border dark:border-border-dark overflow-hidden z-50">
-              {searchResults.map((result, index) => (
-                <TouchableOpacity 
-                  key={result.id}
-                  onPress={() => handleSelectLocation(result)}
-                  className={`flex-row items-center px-4 py-3 ${index < searchResults.length - 1 ? 'border-b border-border dark:border-border-dark' : ''}`}
-                >
-                  <Text className="text-2xl mr-3">{result.icon}</Text>
-                  <View className="flex-1">
-                    <Text className="text-foreground dark:text-foreground-dark font-semibold">{result.name}</Text>
-                    <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm">{result.address}</Text>
-                  </View>
-                  <MapPin size={16} color="#00D4AA" />
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </Animated.View>
-
-        {/* Map Section */}
-        <Animated.View style={mapAnimatedStyle} entering={FadeInDown.delay(200).springify()} className="mb-6">
-          <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold uppercase tracking-[2px]">
-              Location Preview
-            </Text>
-            <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs">
-              Select from list below
-            </Text>
-          </View>
-          
-          <View className="bg-card dark:bg-card-dark rounded-2xl p-4 border border-border dark:border-border-dark">
-            {/* SVG Map */}
-            <Svg width={MAP_SIZE} height={MAP_SIZE} viewBox={`0 0 ${MAP_SIZE} ${MAP_SIZE}`}>
-              <Defs>
-                <LinearGradient id="mapGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <Stop offset="0%" stopColor={isDark ? '#1f2937' : '#f3f4f6'} />
-                  <Stop offset="100%" stopColor={isDark ? '#111827' : '#e5e7eb'} />
-                </LinearGradient>
-              </Defs>
-              
-              {/* Map Background */}
-              <Rect x="0" y="0" width={MAP_SIZE} height={MAP_SIZE} fill="url(#mapGradient)" rx={12} />
-              
-              {/* Grid Lines */}
-              {Array.from({ length: 10 }).map((_, i) => (
-                <G key={`grid-${i}`}>
-                  <Line
-                    x1={0}
-                    y1={(i + 1) * (MAP_SIZE / 10)}
-                    x2={MAP_SIZE}
-                    y2={(i + 1) * (MAP_SIZE / 10)}
-                    stroke={isDark ? '#374151' : '#d1d5db'}
-                    strokeWidth="0.5"
-                    strokeDasharray="4,4"
-                  />
-                  <Line
-                    x1={(i + 1) * (MAP_SIZE / 10)}
-                    y1={0}
-                    x2={(i + 1) * (MAP_SIZE / 10)}
-                    y2={MAP_SIZE}
-                    stroke={isDark ? '#374151' : '#d1d5db'}
-                    strokeWidth="0.5"
-                    strokeDasharray="4,4"
-                  />
-                </G>
-              ))}
-
-              {/* Location Markers */}
-              {POPULAR_LOCATIONS.map(location => {
-                const pos = coordsToMapPosition(location.coordinates.latitude, location.coordinates.longitude);
-                const isSelected = selectedLocation?.id === location.id;
-                
-                return (
-                  <G key={location.id}>
-                    {/* Marker Shadow */}
-                    <Circle
-                      cx={pos.x}
-                      cy={pos.y + 2}
-                      r={isSelected ? 18 : 14}
-                      fill="rgba(0,0,0,0.2)"
-                    />
-                    {/* Marker Background */}
-                    <Circle
-                      cx={pos.x}
-                      cy={pos.y}
-                      r={isSelected ? 18 : 14}
-                      fill={isSelected ? '#00D4AA' : (isDark ? '#374151' : '#e5e7eb')}
-                      stroke={isSelected ? '#00D4AA' : '#6b7280'}
-                      strokeWidth={2}
-                    />
-                    {/* Marker Icon */}
-                    <SvgText
-                      x={pos.x}
-                      y={pos.y + 5}
-                      textAnchor="middle"
-                      fontSize={isSelected ? 14 : 12}
-                    >
-                      {location.icon}
-                    </SvgText>
-                  </G>
-                );
-              })}
-            </Svg>
-
-            {/* Map Legend */}
-            <View className="flex-row items-center justify-center mt-4 gap-4">
-              <View className="flex-row items-center">
-                <View className="w-3 h-3 rounded-full bg-accent dark:bg-accent-dark mr-1" />
-                <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs">Selected</Text>
-              </View>
-              <View className="flex-row items-center">
-                <View className="w-3 h-3 rounded-full bg-gray-500 mr-1" />
-                <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs">Location</Text>
-              </View>
-            </View>
-          </View>
-        </Animated.View>
-
-        {/* Popular Locations */}
-        <Animated.View entering={FadeInDown.delay(300).springify()} className="mb-6">
-          <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold uppercase tracking-[2px] mb-3">
-            Popular Locations
-          </Text>
-          
-          <View className="gap-2">
-            {POPULAR_LOCATIONS.map((location, index) => (
-              <Animated.View
-                key={location.id}
-                entering={FadeInDown.delay(400 + index * 50).springify()}
-              >
-                <TouchableOpacity 
-                  onPress={() => handleSelectLocation(location)}
-                  className={`flex-row items-center bg-card dark:bg-card-dark rounded-2xl px-4 py-3 border ${
-                    selectedLocation?.id === location.id 
-                      ? 'border-accent dark:border-accent-dark' 
-                      : 'border-border dark:border-border-dark'
-                  }`}
-                >
-                  <View className={`rounded-xl p-2 mr-3 ${
-                    selectedLocation?.id === location.id 
-                      ? 'bg-accent/20 dark:bg-accent-dark/20' 
-                      : 'bg-muted dark:bg-muted-dark'
-                  }`}>
-                    <Text className="text-xl">{location.icon}</Text>
-                  </View>
-                  <View className="flex-1">
-                    <Text className={`font-semibold ${
-                      selectedLocation?.id === location.id 
-                        ? 'text-accent dark:text-accent-dark' 
-                        : 'text-foreground dark:text-foreground-dark'
-                    }`}>
-                      {location.name}
-                    </Text>
-                    <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm">
-                      {location.address}
-                    </Text>
-                  </View>
-                  {selectedLocation?.id === location.id && (
-                    <View className="bg-accent dark:bg-accent-dark rounded-full p-1">
-                      <Target size={16} color={isDark ? '#1a1a1a' : '#ffffff'} />
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </Animated.View>
-            ))}
-          </View>
-        </Animated.View>
-
-        {/* Bottom spacing */}
-        <View className="h-24" />
-      </ScrollView>
-
-      {/* Confirm Button */}
-      {selectedLocation && (
-        <Animated.View 
-          entering={FadeInDown.springify()}
-          className="px-6 pb-8 absolute bottom-0 left-0 right-0 bg-background dark:bg-background-dark"
-        >
+    <SafeAreaView style={styles.container}>
+      {locationPermissionMessage ? (
+        <View style={styles.permissionBanner}>
+          <Text style={styles.permissionText}>{locationPermissionMessage}</Text>
           <TouchableOpacity
-            onPress={confirmSelection}
-            className="bg-accent dark:bg-accent-dark rounded-full py-4 items-center flex-row justify-center"
+            onPress={() => {
+              setLocationPermissionMessage('');
+              void (async () => {
+                const { status } = await Location.requestForegroundPermissionsAsync();
+                if (status !== 'granted') {
+                  setLocationPermissionMessage('Location permission is still denied. Search or tap the map to choose a location.');
+                  return;
+                }
+
+                const loc = await Location.getCurrentPositionAsync({
+                  accuracy: Location.Accuracy.Balanced,
+                });
+
+                const coords = {
+                  latitude: loc.coords.latitude,
+                  longitude: loc.coords.longitude,
+                };
+
+                setSelected(coords);
+                const reverse = await Location.reverseGeocodeAsync(coords);
+                const place = reverse[0];
+                if (place) {
+                  const name = place.name || place.street || 'Current Location';
+                  const formattedAddress = [place.street, place.city, place.country].filter(Boolean).join(', ');
+                  setLocationName(name);
+                  setAddress(formattedAddress || name);
+                  setQuery(name);
+                }
+                setLocationPermissionMessage('');
+              })();
+            }}
+            style={styles.permissionAction}
           >
-            <MapPin size={20} color={isDark ? '#1a1a1a' : '#ffffff'} style={{ marginRight: 8 }} />
-            <Text className="text-accent-foreground dark:text-accent-foreground-dark font-bold text-lg">
-              Confirm: {selectedLocation.name}
-            </Text>
+            <Text style={styles.permissionActionText}>Retry</Text>
           </TouchableOpacity>
-        </Animated.View>
+        </View>
+      ) : null}
+
+      <View style={styles.searchBar}>
+        <TextInput
+          value={query}
+          onChangeText={handleQueryChange}
+          placeholder="Search for a place..."
+          placeholderTextColor="#9ca3af"
+          style={styles.input}
+          autoFocus
+        />
+        {searching && <ActivityIndicator size="small" style={styles.loader} />}
+      </View>
+
+      {results.length > 0 && (
+        <FlatList
+          data={results}
+          keyExtractor={(item) => item.place_id}
+          style={styles.results}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.resultItem} onPress={() => void selectPlace(item)}>
+              <Text style={styles.resultMain}>{item.main_text}</Text>
+              <Text style={styles.resultSub}>{item.secondary_text}</Text>
+            </TouchableOpacity>
+          )}
+        />
       )}
+
+      {selected ? (
+        <View style={styles.mapContainer}>
+          <ReminderMap center={selected} radius={300} onLocationSelect={handleMapTap} height={380} />
+        </View>
+      ) : (
+        <View style={styles.mapPlaceholder}>
+          <Text style={styles.placeholderText}>Getting current location...</Text>
+        </View>
+      )}
+
+      {address ? (
+        <Text style={styles.addressLabel} numberOfLines={2}>
+          {address}
+        </Text>
+      ) : null}
+
+      {!GOOGLE_PLACES_KEY ? (
+        <Text style={styles.warningText}>Google Places key is missing. Map tap still works.</Text>
+      ) : null}
+
+      <TouchableOpacity
+        style={[styles.confirm, !selected && styles.confirmDisabled]}
+        onPress={confirmSelection}
+        disabled={!selected}
+      >
+        <Text style={styles.confirmText}>Confirm Location</Text>
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 16,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+  },
+  input: {
+    flex: 1,
+    height: 48,
+    fontSize: 16,
+    color: '#111',
+  },
+  permissionBanner: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: -4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#fff7ed',
+    borderWidth: 1,
+    borderColor: '#fdba74',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  permissionText: {
+    flex: 1,
+    color: '#9a3412',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  permissionAction: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#ea580c',
+  },
+  permissionActionText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  loader: {
+    marginRight: 12,
+  },
+  results: {
+    maxHeight: 220,
+    marginHorizontal: 16,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    zIndex: 20,
+  },
+  resultItem: {
+    padding: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  resultMain: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111',
+  },
+  resultSub: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  mapContainer: {
+    marginHorizontal: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginTop: 8,
+  },
+  mapPlaceholder: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    borderRadius: 16,
+    backgroundColor: '#f3f4f6',
+    height: 380,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  placeholderText: {
+    color: '#6b7280',
+    fontSize: 14,
+  },
+  addressLabel: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    fontSize: 13,
+    color: '#6b7280',
+  },
+  warningText: {
+    marginHorizontal: 16,
+    marginTop: 6,
+    fontSize: 12,
+    color: '#b45309',
+  },
+  confirm: {
+    margin: 16,
+    backgroundColor: '#6366f1',
+    borderRadius: 14,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmDisabled: {
+    opacity: 0.4,
+  },
+  confirmText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+});
