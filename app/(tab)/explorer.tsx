@@ -21,7 +21,6 @@ import Animated, {
 import { 
   Search,
   MapPin, 
-  Clock,
   MoreVertical,
   Edit,
   Trash2,
@@ -32,81 +31,132 @@ import {
   Filter,
   SortAsc,
 } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import * as Location from 'expo-location';
+import { useReminders } from '@/context/reminderContext';
+import type { Reminder } from '@/lib/api';
+import { Coordinates, getDistanceMetres, formatDistance } from '@/lib/location/distance';
 
-type Reminder = {
-  id: string;
-  title: string;
-  location: string;
-  address: string;
-  radius: string;
-  icon: string;
-  enabled: boolean;
-  frequency: string;
-  createdAt: string;
-  category: string;
+function useDistanceToReminder(reminder: Reminder, currentCoordinates: Coordinates | null) {
+  const [distance, setDistance] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (currentCoordinates) {
+      const metres = getDistanceMetres(currentCoordinates, reminder.coordinates);
+      setDistance(formatDistance(metres));
+      return;
+    }
+
+    let mounted = true;
+
+    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+      .then((loc) => {
+        if (!mounted) return;
+
+        const metres = getDistanceMetres(
+          { latitude: loc.coords.latitude, longitude: loc.coords.longitude },
+          reminder.coordinates
+        );
+
+        setDistance(formatDistance(metres));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setDistance(null);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [currentCoordinates, reminder.id, reminder.coordinates]);
+
+  return distance;
+}
+
+type ExplorerReminderCardProps = {
+  reminder: Reminder;
+  index: number;
+  currentCoordinates: Coordinates | null;
+  onOpenDetails: (reminder: Reminder) => void;
+  onOpenActions: (reminder: Reminder) => void;
 };
 
+function ExplorerReminderCard({
+  reminder,
+  index,
+  currentCoordinates,
+  onOpenDetails,
+  onOpenActions,
+}: ExplorerReminderCardProps) {
+  const distance = useDistanceToReminder(reminder, currentCoordinates);
+
+  return (
+    <Animated.View entering={FadeInDown.delay(600 + index * 100).springify()}>
+      <TouchableOpacity
+        onPress={() => onOpenDetails(reminder)}
+        className="bg-card dark:bg-card-dark rounded-3xl p-5 border border-border dark:border-border-dark"
+      >
+        <View className="flex-row items-start">
+          <View className="bg-accent/20 dark:bg-accent-dark/20 rounded-2xl p-3 mr-4">
+            <Text className="text-3xl">{reminder.icon}</Text>
+          </View>
+
+          <View className="flex-1 mr-3">
+            <Text className="text-foreground dark:text-foreground-dark font-bold text-lg mb-2">
+              {reminder.title}
+            </Text>
+            <View className="flex-row items-center mb-1">
+              <MapPin size={14} className="text-muted-foreground dark:text-muted-foreground-dark mr-1" />
+              <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm">
+                {reminder.location}
+              </Text>
+            </View>
+            <View className="flex-row items-center gap-2 mt-2">
+              <View className="bg-muted dark:bg-muted-dark px-2 py-1 rounded">
+                <Text className="text-foreground dark:text-foreground-dark text-xs font-semibold">
+                  {distance ?? '--'}
+                </Text>
+              </View>
+              <View className="bg-muted dark:bg-muted-dark px-2 py-1 rounded">
+                <Text className="text-foreground dark:text-foreground-dark text-xs font-semibold">
+                  {reminder.radius}m
+                </Text>
+              </View>
+              <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs italic">
+                {reminder.frequency === 'once' ? 'Once' : 'Always'}
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            onPress={() => onOpenActions(reminder)}
+            className="p-2"
+          >
+            <MoreVertical size={20} className="text-muted-foreground dark:text-muted-foreground-dark" />
+          </TouchableOpacity>
+        </View>
+
+        {!reminder.enabled && (
+          <View className="absolute top-5 right-5 bg-muted dark:bg-muted-dark px-2 py-1 rounded">
+            <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold">
+              DISABLED
+            </Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
 export default function ExplorerScreen() {
-  const router = useRouter();
   const [search, setSearch] = useState('');
   const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(null);
   const [showActions, setShowActions] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
-  const [filterCategory, setFilterCategory] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'date' | 'name' | 'location'>('date');
-
-  // Sample reminders data
-  const [reminders, setReminders] = useState<Reminder[]>([
-    {
-      id: '1',
-      title: 'Buy fuel',
-      location: 'Shell Station',
-      address: 'Atlantic Ave, Brooklyn',
-      radius: '300m',
-      icon: '⛽',
-      enabled: true,
-      frequency: 'Daily',
-      createdAt: '2024-02-01',
-      category: 'errands',
-    },
-    {
-      id: '2',
-      title: 'Pick up dry cleaning',
-      location: 'The Cleaners',
-      address: '5th Ave, Brooklyn',
-      radius: '100m',
-      icon: '👔',
-      enabled: true,
-      frequency: 'Weekly',
-      createdAt: '2024-02-02',
-      category: 'errands',
-    },
-    {
-      id: '3',
-      title: 'Gym session',
-      location: 'Equinox',
-      address: 'Dumbo, Brooklyn',
-      radius: '200m',
-      icon: '🏋️',
-      enabled: false,
-      frequency: 'Daily',
-      createdAt: '2024-01-28',
-      category: 'fitness',
-    },
-    {
-      id: '4',
-      title: 'Coffee meeting',
-      location: 'Coffee Collective',
-      address: 'Jægersborggade 10, Copenhagen',
-      radius: '150m',
-      icon: '☕',
-      enabled: true,
-      frequency: 'Once',
-      createdAt: '2024-02-03',
-      category: 'work',
-    },
-  ]);
+  const [filterCategory] = useState<string>('all');
+  const [sortBy] = useState<'date' | 'name' | 'location'>('date');
+  const [currentCoordinates, setCurrentCoordinates] = useState<Coordinates | null>(null);
+  const [isLiveTracking, setIsLiveTracking] = useState(false);
+  const { reminders, deleteReminder } = useReminders();
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -124,6 +174,57 @@ export default function ExplorerScreen() {
       searchOpacity.value = withTiming(1, { duration: 500 });
       searchScale.value = withSpring(1, { damping: 12, stiffness: 100 });
     }, 200);
+  }, [headerOpacity, headerTranslateY, searchOpacity, searchScale]);
+
+  useEffect(() => {
+    let mounted = true;
+    let subscription: Location.LocationSubscription | null = null;
+
+    const startWatchingLocation = async () => {
+      try {
+        const existingPermission = await Location.getForegroundPermissionsAsync();
+        const permission =
+          existingPermission.status === 'granted'
+            ? existingPermission
+            : await Location.requestForegroundPermissionsAsync();
+
+        if (!mounted || permission.status !== 'granted') {
+          setIsLiveTracking(false);
+          return;
+        }
+
+        subscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.Balanced,
+            distanceInterval: 25,
+            timeInterval: 15000,
+          },
+          (position) => {
+            if (!mounted) return;
+            setCurrentCoordinates({
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+            });
+          }
+        );
+
+        if (mounted) {
+          setIsLiveTracking(true);
+        }
+      } catch {
+        if (!mounted) return;
+        setCurrentCoordinates(null);
+        setIsLiveTracking(false);
+      }
+    };
+
+    startWatchingLocation();
+
+    return () => {
+      mounted = false;
+      subscription?.remove();
+      setIsLiveTracking(false);
+    };
   }, []);
 
   const headerAnimatedStyle = useAnimatedStyle(() => ({
@@ -141,7 +242,7 @@ export default function ExplorerScreen() {
       const matchesSearch = 
         reminder.title.toLowerCase().includes(search.toLowerCase()) ||
         reminder.location.toLowerCase().includes(search.toLowerCase());
-      const matchesFilter = filterCategory === 'all' || reminder.category === filterCategory;
+      const matchesFilter = filterCategory === 'all' || reminder.frequency === filterCategory;
       return matchesSearch && matchesFilter;
     })
     .sort((a, b) => {
@@ -159,18 +260,16 @@ export default function ExplorerScreen() {
         setShowDetails(true);
         break;
       case 'edit':
-        // Navigate to edit screen
-        console.log('Edit reminder:', reminder.id);
+        Alert.alert('Coming soon', 'Edit reminder flow is not available yet.');
         break;
       case 'duplicate':
-        const duplicate = { ...reminder, id: Math.random().toString(), title: `${reminder.title} (Copy)` };
-        setReminders([...reminders, duplicate]);
+        Alert.alert('Coming soon', 'Duplicate action is not available yet.');
         break;
       case 'share':
-        console.log('Share reminder:', reminder.id);
+        Alert.alert('Coming soon', 'Share action is not available yet.');
         break;
       case 'archive':
-        console.log('Archive reminder:', reminder.id);
+        Alert.alert('Coming soon', 'Archive action is not available yet.');
         break;
       case 'delete':
         Alert.alert(
@@ -181,18 +280,14 @@ export default function ExplorerScreen() {
             {
               text: 'Delete',
               style: 'destructive',
-              onPress: () => setReminders(reminders.filter((r) => r.id !== reminder.id)),
+              onPress: () => {
+                void deleteReminder(reminder.id);
+              },
             },
           ]
         );
         break;
     }
-  };
-
-  const toggleReminder = (id: string) => {
-    setReminders(reminders.map((r) => 
-      r.id === id ? { ...r, enabled: !r.enabled } : r
-    ));
   };
 
   return (
@@ -204,9 +299,16 @@ export default function ExplorerScreen() {
             <Text className="text-foreground dark:text-foreground-dark text-4xl font-bold mb-2">
               Explorer
             </Text>
-            <Text className="text-muted-foreground dark:text-muted-foreground-dark text-base">
-              Manage all your location reminders
-            </Text>
+            <View className="flex-row items-center">
+              <Text className="text-muted-foreground dark:text-muted-foreground-dark text-base">
+                Manage all your location reminders
+              </Text>
+              {isLiveTracking ? (
+                <View className="ml-2 px-2 py-0.5 rounded-full bg-green-500/15 border border-green-500/30">
+                  <Text className="text-green-500 text-[10px] font-bold tracking-widest uppercase">Live</Text>
+                </View>
+              ) : null}
+            </View>
           </Animated.View>
 
           {/* Search Bar */}
@@ -283,68 +385,20 @@ export default function ExplorerScreen() {
           ) : (
             <View className="gap-3">
               {filteredReminders.map((reminder, index) => (
-                <Animated.View
+                <ExplorerReminderCard
                   key={reminder.id}
-                  entering={FadeInDown.delay(600 + index * 100).springify()}
-                >
-                  <TouchableOpacity
-                    onPress={() => {
-                      setSelectedReminder(reminder);
-                      setShowDetails(true);
-                    }}
-                    className="bg-card dark:bg-card-dark rounded-3xl p-5 border border-border dark:border-border-dark"
-                  >
-                    <View className="flex-row items-start">
-                      {/* Icon */}
-                      <View className="bg-accent/20 dark:bg-accent-dark/20 rounded-2xl p-3 mr-4">
-                        <Text className="text-3xl">{reminder.icon}</Text>
-                      </View>
-
-                      {/* Content */}
-                      <View className="flex-1 mr-3">
-                        <Text className="text-foreground dark:text-foreground-dark font-bold text-lg mb-2">
-                          {reminder.title}
-                        </Text>
-                        <View className="flex-row items-center mb-1">
-                          <MapPin size={14} className="text-muted-foreground dark:text-muted-foreground-dark mr-1" />
-                          <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm">
-                            {reminder.location}
-                          </Text>
-                        </View>
-                        <View className="flex-row items-center gap-2 mt-2">
-                          <View className="bg-muted dark:bg-muted-dark px-2 py-1 rounded">
-                            <Text className="text-foreground dark:text-foreground-dark text-xs font-semibold">
-                              {reminder.radius}
-                            </Text>
-                          </View>
-                          <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs italic">
-                            {reminder.frequency}
-                          </Text>
-                        </View>
-                      </View>
-
-                      {/* Actions */}
-                      <TouchableOpacity
-                        onPress={() => {
-                          setSelectedReminder(reminder);
-                          setShowActions(true);
-                        }}
-                        className="p-2"
-                      >
-                        <MoreVertical size={20} className="text-muted-foreground dark:text-muted-foreground-dark" />
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Status indicator */}
-                    {!reminder.enabled && (
-                      <View className="absolute top-5 right-5 bg-muted dark:bg-muted-dark px-2 py-1 rounded">
-                        <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold">
-                          DISABLED
-                        </Text>
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                </Animated.View>
+                  reminder={reminder}
+                  index={index}
+                  currentCoordinates={currentCoordinates}
+                  onOpenDetails={(target) => {
+                    setSelectedReminder(target);
+                    setShowDetails(true);
+                  }}
+                  onOpenActions={(target) => {
+                    setSelectedReminder(target);
+                    setShowActions(true);
+                  }}
+                />
               ))}
             </View>
           )}
@@ -478,7 +532,7 @@ export default function ExplorerScreen() {
                         Radius
                       </Text>
                       <Text className="text-foreground dark:text-foreground-dark font-bold">
-                        {selectedReminder.radius}
+                        {selectedReminder.radius}m
                       </Text>
                     </View>
 

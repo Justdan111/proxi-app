@@ -11,10 +11,11 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Proxi needs location access to notify you when you're near a reminder.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Proxi needs location to alert you near saved places.",
         "NSLocationAlwaysUsageDescription": "Proxi uses background location to detect when you enter a reminder area.",
         "NSLocationWhenInUseUsageDescription": "Proxi uses your location to show nearby reminders.",
-        "UIBackgroundModes": ["location", "fetch"]
+        "UIBackgroundModes": ["location", "fetch"],
+        "UNAuthorizationOptionCriticalAlert": true
       }
     },
     "android": {
@@ -31,7 +32,10 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE"
+        "VIBRATE",
+        "USE_FULL_SCREEN_INTENT",
+        "WAKE_LOCK",
+        "FOREGROUND_SERVICE"
       ]
     },
     "web": {
@@ -69,7 +73,7 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#6366f1",
-          "sounds": []
+          "sounds": ["./assets/sounds/proxi-alert.wav"]
         }
       ]
     ],
