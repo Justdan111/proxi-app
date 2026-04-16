@@ -65,12 +65,12 @@ async function checkProximity(userCoords: Coordinates) {
     const inside = isInsideRadius(userCoords, reminder.coordinates, reminder.radius);
 
     if (inside) {
-      await sendReminderNotification({
-        reminderId:    reminder.id,
-        reminderTitle: reminder.title,
-        location:      reminder.location,
-        icon:          reminder.icon,
-      });
+  await sendReminderNotification({
+    reminderId:    reminder.id,
+    reminderTitle: reminder.title,
+    location:      reminder.location,
+    icon:          reminder.icon,
+  });
 
       if (reminder.frequency === 'once') {
         await markTriggered(reminder.id);

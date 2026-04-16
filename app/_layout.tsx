@@ -11,7 +11,12 @@ import { ThemeProvider } from '@/context/themeContext';
 import { AuthProvider, useAuth } from '@/context/authContext';
 import { ReminderProvider, useReminders } from '@/context/reminderContext';
 import SplashScreen from '@/components/splashScreen';
-import { setupNotificationChannel, addNotificationResponseListener } from '@/lib/notifications/notifications';
+import {
+  setupNotificationChannel,
+  registerNotificationCategories,
+  addNotificationResponseListener,
+  snoozeReminder,
+} from '@/lib/notifications/notifications';
 import { startGeofencing, stopGeofencing, cacheRemindersForBackground } from '@/lib/location/geofencing';
 import { requestAllPermissions } from '@/lib/location/permissions';
 
@@ -26,12 +31,23 @@ function AppInitializer() {
 
   useEffect(() => {
     void setupNotificationChannel();
+    void registerNotificationCategories();
 
-    listenerRef.current = addNotificationResponseListener((reminderId) => {
-      if (reminderId) {
-        router.push('/(tab)/home');
+    listenerRef.current = addNotificationResponseListener(
+      (reminderId) => {
+        if (reminderId) {
+          router.push('/(tab)/home');
+        }
+      },
+      (reminderId) => {
+        console.log('Marked done:', reminderId);
+      },
+      (reminderId, data) => {
+        if (reminderId) {
+          void snoozeReminder(data, 10);
+        }
       }
-    });
+    );
 
     return () => {
       listenerRef.current?.remove();
