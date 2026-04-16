@@ -144,6 +144,7 @@ export async function snoozeReminder(data: ReminderNotificationData, minutes = 1
       data:  { reminderId: data.reminderId },
     },
     trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
       seconds: minutes * 60,
       repeats: false,
     },
