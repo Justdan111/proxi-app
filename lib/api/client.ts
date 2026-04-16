@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 const DEFAULT_PROD_URL = 'https://proxi-api-production.up.railway.app';
+const USE_LOCAL_API = process.env.EXPO_PUBLIC_USE_LOCAL_API === 'true';
 
 function getExpoHost() {
   const hostUri = Constants.expoConfig?.hostUri;
@@ -21,6 +22,10 @@ function resolveBaseUrl() {
   if (configuredUrl) return configuredUrl;
 
   if (!__DEV__) return DEFAULT_PROD_URL;
+
+  // In Expo Go, auto-detecting a local API host often points to a non-API service,
+  // which surfaces as 404 "Not found" during auth calls.
+  if (!USE_LOCAL_API) return DEFAULT_PROD_URL;
 
   const expoHost = getExpoHost();
   if (expoHost) return `http://${expoHost}:8080`;
