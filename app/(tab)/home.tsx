@@ -22,29 +22,135 @@ import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import { useTheme } from '@/context/themeContext';
 import { useReminders } from '@/context/reminderContext';
+import type { Reminder } from '@/lib/api';
+import { Coordinates, getDistanceMetres, formatDistance } from '@/lib/location/distance';
 
-const EARTH_RADIUS_METERS = 6371000;
+function useDistanceToReminder(reminder: Reminder, currentCoordinates: Coordinates | null) {
+  const [distance, setDistance] = useState<string | null>(null);
 
-function toRadians(value: number) {
-  return (value * Math.PI) / 180;
+  useEffect(() => {
+    if (currentCoordinates) {
+      const metres = getDistanceMetres(currentCoordinates, reminder.coordinates);
+      setDistance(formatDistance(metres));
+      return;
+    }
+
+    let mounted = true;
+
+    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
+      .then((loc) => {
+        if (!mounted) return;
+
+        const metres = getDistanceMetres(
+          { latitude: loc.coords.latitude, longitude: loc.coords.longitude },
+          reminder.coordinates
+        );
+
+        setDistance(formatDistance(metres));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setDistance(null);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [currentCoordinates, reminder.id, reminder.coordinates]);
+
+  return distance;
 }
 
-function calculateDistanceMeters(
-  from: { latitude: number; longitude: number },
-  to: { latitude: number; longitude: number }
-) {
-  const latDiff = toRadians(to.latitude - from.latitude);
-  const lonDiff = toRadians(to.longitude - from.longitude);
+type ReminderCardProps = {
+  item: Reminder;
+  index: number;
+  onToggle: (id: string) => void;
+  currentCoordinates: Coordinates | null;
+};
 
-  const a =
-    Math.sin(latDiff / 2) * Math.sin(latDiff / 2) +
-    Math.cos(toRadians(from.latitude)) *
-      Math.cos(toRadians(to.latitude)) *
-      Math.sin(lonDiff / 2) *
-      Math.sin(lonDiff / 2);
+function ReminderCard({ item, index, onToggle, currentCoordinates }: ReminderCardProps) {
+  const distance = useDistanceToReminder(item, currentCoordinates);
 
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return EARTH_RADIUS_METERS * c;
+  return (
+    <Animated.View
+      entering={FadeInDown.delay(index * 100).springify()}
+      className="px-6 pb-4"
+    >
+      <View className="bg-card dark:bg-card-dark rounded-3xl p-5 border border-border dark:border-border-dark">
+        {/* Top Section */}
+        <View className="flex-row items-start justify-between mb-4">
+          <View className="flex-row items-start flex-1 mr-4">
+            <View className="bg-accent/20 dark:bg-accent-dark/20 rounded-2xl p-3 mr-3">
+              <Text className="text-3xl">{item.icon}</Text>
+            </View>
+            <View className="flex-1 pt-1">
+              <Text className="text-foreground dark:text-foreground-dark font-bold text-lg mb-1">
+                {item.title}
+              </Text>
+              <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm">
+                {item.location}
+              </Text>
+            </View>
+          </View>
+
+          {/* Toggle Switch */}
+          <TouchableOpacity
+            onPress={() => onToggle(item.id)}
+            className={`w-14 h-8 rounded-full p-1 ${
+              item.enabled
+                ? 'bg-accent dark:bg-accent-dark'
+                : 'bg-muted dark:bg-muted-dark'
+            }`}
+          >
+            <Animated.View
+              className="w-6 h-6 rounded-full bg-foreground dark:bg-foreground-dark"
+              style={{
+                transform: [{ translateX: item.enabled ? 24 : 0 }],
+              }}
+            />
+          </TouchableOpacity>
+        </View>
+
+        {/* Bottom Section */}
+        <View className="flex-row items-center justify-between">
+          <View className="flex-row items-center gap-2">
+            <View className="bg-muted dark:bg-muted-dark px-3 py-1.5 rounded-lg">
+              <Text className="text-foreground dark:text-foreground-dark text-xs font-bold tracking-wider uppercase">
+                {distance ?? '--'}
+              </Text>
+            </View>
+            <View className="bg-accent/10 dark:bg-accent-dark/10 px-3 py-1.5 rounded-lg">
+              <Text className="text-accent dark:text-accent-dark text-xs font-bold">
+                {item.radius}m radius
+              </Text>
+            </View>
+          </View>
+          <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm italic">
+            {item.frequency === 'once' ? 'Once' : 'Always'}
+          </Text>
+        </View>
+
+        {/* Triggered Badge */}
+        {item.triggered && item.frequency === 'once' && (
+          <View className="mt-3 bg-green-500/20 px-3 py-2 rounded-lg flex-row items-center">
+            <Check size={14} color="#22c55e" style={{ marginRight: 6 }} />
+            <Text className="text-green-500 text-xs font-bold">Completed</Text>
+          </View>
+        )}
+
+        {/* Disabled State Overlay */}
+        {!item.enabled && (
+          <View className="absolute top-0 left-0 right-0 bottom-0 bg-background/50 dark:bg-background-dark/50 rounded-3xl items-center justify-center">
+            <View className="bg-muted dark:bg-muted-dark px-4 py-2 rounded-lg">
+              <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold tracking-widest uppercase">
+                Disabled
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+    </Animated.View>
+  );
 }
 
 export default function HomeScreen() {
@@ -167,19 +273,6 @@ export default function HomeScreen() {
       setCurrentCoordinates(null);
     }
   }, [applyCoordinates]);
-
-  const getDistanceLabel = React.useCallback(
-    (item: (typeof reminders)[number]) => {
-      if (!currentCoordinates) return '--';
-
-      const meters = calculateDistanceMeters(currentCoordinates, item.coordinates);
-      if (Number.isNaN(meters)) return '--';
-      if (meters < 1000) return `${Math.round(meters)}m`;
-
-      return `${(meters / 1000).toFixed(1)}km`;
-    },
-    [currentCoordinates]
-  );
 
   const onRefresh = React.useCallback(async () => {
     setRefreshing(true);
@@ -324,84 +417,12 @@ export default function HomeScreen() {
             />
           }
           renderItem={({ item, index }) => (
-            <Animated.View
-              entering={FadeInDown.delay(index * 100).springify()}
-              className="px-6 pb-4"
-            >
-              <View className="bg-card dark:bg-card-dark rounded-3xl p-5 border border-border dark:border-border-dark">
-                {/* Top Section */}
-                <View className="flex-row items-start justify-between mb-4">
-                  <View className="flex-row items-start flex-1 mr-4">
-                    <View className="bg-accent/20 dark:bg-accent-dark/20 rounded-2xl p-3 mr-3">
-                      <Text className="text-3xl">{item.icon}</Text>
-                    </View>
-                    <View className="flex-1 pt-1">
-                      <Text className="text-foreground dark:text-foreground-dark font-bold text-lg mb-1">
-                        {item.title}
-                      </Text>
-                      <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm">
-                        {item.location}
-                      </Text>
-                    </View>
-                  </View>
-                  
-                  {/* Toggle Switch */}
-                  <TouchableOpacity
-                    onPress={() => handleToggleReminder(item.id)}
-                    className={`w-14 h-8 rounded-full p-1 ${
-                      item.enabled 
-                        ? 'bg-accent dark:bg-accent-dark' 
-                        : 'bg-muted dark:bg-muted-dark'
-                    }`}
-                  >
-                    <Animated.View
-                      className="w-6 h-6 rounded-full bg-foreground dark:bg-foreground-dark"
-                      style={{
-                        transform: [{ translateX: item.enabled ? 24 : 0 }],
-                      }}
-                    />
-                  </TouchableOpacity>
-                </View>
-
-                {/* Bottom Section */}
-                <View className="flex-row items-center justify-between">
-                  <View className="flex-row items-center gap-2">
-                    <View className="bg-muted dark:bg-muted-dark px-3 py-1.5 rounded-lg">
-                      <Text className="text-foreground dark:text-foreground-dark text-xs font-bold tracking-wider uppercase">
-                        {getDistanceLabel(item)} away
-                      </Text>
-                    </View>
-                    <View className="bg-accent/10 dark:bg-accent-dark/10 px-3 py-1.5 rounded-lg">
-                      <Text className="text-accent dark:text-accent-dark text-xs font-bold">
-                        {item.radius}m radius
-                      </Text>
-                    </View>
-                  </View>
-                  <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm italic">
-                    {item.frequency === 'once' ? 'Once' : 'Always'}
-                  </Text>
-                </View>
-
-                {/* Triggered Badge */}
-                {item.triggered && item.frequency === 'once' && (
-                  <View className="mt-3 bg-green-500/20 px-3 py-2 rounded-lg flex-row items-center">
-                    <Check size={14} color="#22c55e" style={{ marginRight: 6 }} />
-                    <Text className="text-green-500 text-xs font-bold">Completed</Text>
-                  </View>
-                )}
-
-                {/* Disabled State Overlay */}
-                {!item.enabled && (
-                  <View className="absolute top-0 left-0 right-0 bottom-0 bg-background/50 dark:bg-background-dark/50 rounded-3xl items-center justify-center">
-                    <View className="bg-muted dark:bg-muted-dark px-4 py-2 rounded-lg">
-                      <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold tracking-widest uppercase">
-                        Disabled
-                      </Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-            </Animated.View>
+            <ReminderCard
+              item={item}
+              index={index}
+              onToggle={handleToggleReminder}
+              currentCoordinates={currentCoordinates}
+            />
           )}
           contentContainerStyle={{ paddingBottom: 100 }}
           ListEmptyComponent={
