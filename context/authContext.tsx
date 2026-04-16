@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { router } from 'expo-router';
+import { AxiosError } from 'axios';
 import { authApi, User } from '@/lib/api';
 import { getApiError } from '@/lib/api/errors';
 
@@ -22,29 +23,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError]       = useState<string | null>(null);
 
   // On app start — check if a valid token exists and fetch user profile
-  useEffect(() => {
-    const bootstrap = async () => {
-      try {
-        const token = await authApi.getToken();
-        if (token) {
-          const me = await authApi.getMe();
-          setUser(me);
-        }
-      } catch {
-        // Token invalid/expired — clear it
-        await authApi.clearToken();
-      } finally {
-        setLoading(false);
+ useEffect(() => {
+  const bootstrap = async () => {
+    try {
+      const token = await authApi.getToken();
+      const storedUser = await authApi.getStoredUser();
+
+      if (storedUser) {
+        // Keep users signed in immediately between app launches.
+        setUser(storedUser);
       }
-    };
-    bootstrap();
-  }, []);
+
+      if (!token) {
+        // Never logged in or explicitly logged out
+        if (!storedUser) {
+          setUser(null);
+        }
+        setLoading(false);
+        return;
+      }
+
+      // Token exists — refresh profile in background.
+      try {
+        const me = await authApi.getMe();
+        await authApi.saveUser(me);
+        setUser(me);
+      } catch (err) {
+        // Only force logout when backend confirms token is invalid.
+        if (err instanceof AxiosError && err.response?.status === 401) {
+          await authApi.clearToken();
+          await authApi.clearUser();
+          setUser(null);
+        }
+      }
+    } catch {
+      // Keep cached session on transient storage/network failures.
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  bootstrap();
+}, []);
 
   const login = async (email: string, password: string) => {
     setError(null);
     try {
       const result = await authApi.login({ email, password });
       await authApi.saveToken(result.token);
+      await authApi.saveUser(result.user);
       setUser(result.user);
       return true;
     } catch (err) {
@@ -58,6 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const result = await authApi.signup({ name, email, password });
       await authApi.saveToken(result.token);
+      await authApi.saveUser(result.user);
       setUser(result.user);
       router.replace('/(tab)/home');
     } catch (err) {
@@ -72,6 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Ignore logout API errors — always clear locally
     } finally {
       await authApi.clearToken();
+      await authApi.clearUser();
       setUser(null);
       router.replace('/(auth)/login');
     }

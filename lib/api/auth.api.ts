@@ -1,5 +1,24 @@
 import apiClient, { TOKEN_KEY } from './client';
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const USER_KEY = 'proxi_user';
+
+// Call this after every successful login/signup
+export async function saveUser(user: User): Promise<void> {
+  await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
+}
+
+// Used on app launch when offline
+export async function getStoredUser(): Promise<User | null> {
+  const raw = await AsyncStorage.getItem(USER_KEY);
+  return raw ? JSON.parse(raw) : null;
+}
+
+// Clear on logout
+export async function clearUser(): Promise<void> {
+  await AsyncStorage.removeItem(USER_KEY);
+}
 
 export interface User {
   id: string;
@@ -53,4 +72,10 @@ export const authApi = {
 
   getToken: () =>
     SecureStore.getItemAsync(TOKEN_KEY),
+
+  saveUser,
+
+  getStoredUser,
+
+  clearUser,
 };
