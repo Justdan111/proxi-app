@@ -1,162 +1,227 @@
-# Proxi App - Audit Report
+# Proxi Deployment Audit Report
 
-## 1. Features NOT Implemented Yet
+Date: 18 April 2026
+Project: Proxi (Expo React Native)
+Scope: Production readiness for Apple App Store and Google Play Store
 
-### Real Maps Integration
-- **Current state**: Using custom SVG drawings to simulate maps
-- **Installed but unused**: `expo-maps`, `react-native-maps` packages are in `package.json` but never imported
-- **What's needed**: Replace SVG maps in `location-picker.tsx` and `add-reminder.tsx` with actual `MapView` components
+## 1. Executive Summary
 
-### Real Location Services
-- **Current state**: Using hardcoded coordinates (Abuja, Nigeria area)
-- **Installed but unused**: `expo-location` package exists but not integrated
-- **What's needed**: 
-  - Request location permissions
-  - Get real user GPS coordinates
-  - Background location tracking for proximity detection
+Proxi has moved beyond prototype stage and now includes real backend integration for authentication, reminders, and activity logs, plus live location and notification logic.
 
-### Places API Search
-- **Current state**: Using hardcoded `POPULAR_LOCATIONS` array in `location-picker.tsx`
-- **TODO comment**: `// TODO: Replace with actual Places API search`
-- **What's needed**: Google Places API or similar for location search
+The app is not yet ready for store deployment because release infrastructure and compliance configuration are incomplete.
 
-### Push Notifications
-- **Current state**: Only in-app modal notifications (simulate with navigation to `/notification` screen)
-- **What's needed**: 
-  - `expo-notifications` for local push notifications
-  - Background notification triggers when entering geofences
+Main blockers are:
+- Missing EAS build configuration
+- Missing app identifiers and build version metadata in app config
+- Placeholder Google Maps API keys still present
+- Missing privacy/compliance deliverables for store submission
 
-### Geofencing
-- **Current state**: Only simulated proximity detection in `lib/simulation/simulationContext.tsx`
-- **What's needed**: Real geofencing using `expo-location` TaskManager for background location
+## 2. What Is Implemented
 
----
+### 2.1 Backend/API Integration
+Implemented and wired to API client:
+- Auth: signup, login, logout, me
+- Reminders: CRUD and toggle
+- Activity log: read and write
 
-## 2. Backend API - NOT Built Yet
+References:
+- [lib/api/auth.api.ts](lib/api/auth.api.ts)
+- [lib/api/reminders.api.ts](lib/api/reminders.api.ts)
+- [lib/api/activities.api.ts](lib/api/activities.api.ts)
+- [context/reminderContext.tsx](context/reminderContext.tsx)
 
-All data is stored **locally in React state**. These TODOs exist in `context/reminderContext.tsx`:
+### 2.2 Session Persistence (Login Once)
+Implemented:
+- Token persisted in SecureStore
+- User persisted in AsyncStorage
+- Bootstrap restores cached user, refreshes profile when online
+- Forced logout only on confirmed 401 invalid session
 
-| Feature | Current State | Location |
-|---------|---------------|----------|
-| Create Reminder | Local state only | Line 78-79 |
-| Delete Reminder | Local state only | Line 85-86 |
-| Toggle Reminder | Local state only | Line 94-95 |
-| Update Reminder | Local state only | Line 103-104 |
-| Fetch Reminders | Local state only | `home.tsx` Line 78 |
+References:
+- [context/authContext.tsx](context/authContext.tsx)
+- [lib/api/auth.api.ts](lib/api/auth.api.ts)
 
-### Authentication
-- **Current state**: Fake login/signup in `authContext.tsx` - just stores user in `AsyncStorage`, no real validation
-- **What's needed**: Real authentication API
+### 2.3 Location + Geofencing
+Implemented:
+- Foreground and background permission flow
+- Background location task and periodic fetch backup
+- Proximity checks and once/always reminder behavior
 
----
+References:
+- [lib/location/permissions.ts](lib/location/permissions.ts)
+- [lib/location/geofencing.ts](lib/location/geofencing.ts)
 
-## 3. APIs You Need to Build (Go Backend)
+### 2.4 Notifications
+Implemented:
+- Android notification channel
+- Custom sound support
+- Notification action categories (Done/Snooze)
+- Response listener wiring in app root
 
-### Auth Endpoints
-```
-POST   /api/auth/signup          { email, password, name }
-POST   /api/auth/login           { email, password }
-POST   /api/auth/logout
-GET    /api/auth/me              → user profile
-```
+References:
+- [lib/notifications/notifications.ts](lib/notifications/notifications.ts)
+- [app/_layout.tsx](app/_layout.tsx)
+- [app.json](app.json)
 
-### Reminders CRUD
-```
-GET    /api/reminders            → list all user reminders
-POST   /api/reminders            → create reminder
-GET    /api/reminders/:id        → get single reminder
-PUT    /api/reminders/:id        → update reminder
-PATCH  /api/reminders/:id/toggle → toggle enabled state
-DELETE /api/reminders/:id        → delete reminder
-```
+### 2.5 Core Product Screens
+Implemented with live data:
+- Home: live distance and reminder state
+- Explorer: live distance and reminder listing from context
+- Activity: API-backed grouped timeline
+- Add reminder and location picker flows
 
-### Reminder Schema
-```json
-{
-  "id": "string",
-  "userId": "string",
-  "title": "string",
-  "location": "string",
-  "address": "string",
-  "radius": 300,
-  "enabled": true,
-  "icon": "⛽",
-  "frequency": "once | always",
-  "timeframe": {
-    "startTime": "08:00",
-    "endTime": "20:00"
-  },
-  "coordinates": {
-    "latitude": 9.0820,
-    "longitude": 7.4800
-  },
-  "triggered": false,
-  "createdAt": "timestamp"
-}
-```
+References:
+- [app/(tab)/home.tsx](app/(tab)/home.tsx)
+- [app/(tab)/explorer.tsx](app/(tab)/explorer.tsx)
+- [app/(tab)/activity.tsx](app/(tab)/activity.tsx)
+- [app/add-reminder.tsx](app/add-reminder.tsx)
+- [app/location-picker.tsx](app/location-picker.tsx)
 
-### Activity/History (for Activity tab)
-```
-GET    /api/activities           → list activity history
-POST   /api/activities           → log activity event
-```
+## 3. Deployment Blockers (Must Fix Before Store Release)
 
----
+### 3.1 Missing EAS Build Configuration
+No EAS build profile file exists.
 
-## 4. Other Incomplete Features
+Missing file:
+- [eas.json](eas.json)
 
-| Feature | File | Issue |
-|---------|------|-------|
-| **Explorer screen** | `app/(tab)/explorer.tsx` | Uses local mock data, not from reminderContext |
-| **Activity screen** | `app/(tab)/activity.tsx` | Hardcoded activities, no real data |
-| **Edit reminder** | `app/(tab)/explorer.tsx` | Just logs to console, no edit screen |
-| **Share/Archive** | `app/(tab)/explorer.tsx` | Console.log only |
-| **Profile edit** | `app/(tab)/settings.tsx` | No profile editing functionality |
-| **User location display** | `app/(tab)/home.tsx` | Hardcoded to "Abuja, NG" |
-| **Distance calculation** | Reminders | Shows `--`, need real GPS to calculate |
+Impact:
+- Cannot run standardized cloud builds for release artifacts.
 
----
+### 3.2 Missing App Identity and Version Metadata
+Current app config is missing required store identity/version fields.
 
-## 5. Next Phase Recommendations
+In [app.json](app.json), missing:
+- `expo.ios.bundleIdentifier`
+- `expo.android.package`
+- `expo.ios.buildNumber`
+- `expo.android.versionCode`
 
-### Phase 1: Backend Foundation
-1. Build Go backend with auth + reminders CRUD
-2. Add API client to React Native app
-3. Replace local state with API calls
+Impact:
+- Store binaries cannot be uniquely identified/versioned for submission and updates.
 
-### Phase 2: Real Location
-1. Integrate `expo-location` for GPS
-2. Replace SVG maps with `react-native-maps`
-3. Implement Google Places API for search
+### 3.3 Placeholder Google Maps Keys
+Current config contains placeholders:
+- `YOUR_ANDROID_KEY`
+- `YOUR_IOS_KEY`
 
-### Phase 3: Notifications
-1. Add `expo-notifications`
-2. Implement geofencing with background tasks
-3. Trigger local notifications on proximity
+Reference:
+- [app.json](app.json)
 
-### Phase 4: Polish
-1. Activity logging
-2. Edit reminder flow
-3. Cloud sync across devices
+Impact:
+- Map-related production behavior may fail or be rejected during review testing.
 
----
+### 3.4 Missing Legal/Compliance Assets
+No privacy policy file/link is present in repo.
+No App Store privacy details / Play Data Safety mapping artifacts found.
 
-## 6. Package Dependencies Status
+Impact:
+- Submission will stall during metadata/compliance steps.
 
-### Installed & Used
-- `expo-router` - Navigation ✅
-- `react-native-reanimated` - Animations ✅
-- `nativewind` / `tailwindcss` - Styling ✅
-- `@react-native-async-storage/async-storage` - Local storage ✅
-- `lucide-react-native` - Icons ✅
-- `react-native-svg` - SVG rendering ✅
+## 4. High-Risk Review Items
 
-### Installed & NOT Used
-- `expo-location` - GPS/Location services ❌
-- `expo-maps` - Maps ❌
-- `react-native-maps` - Maps ❌
+### 4.1 Critical Alert Claim on iOS
+`UNAuthorizationOptionCriticalAlert` is enabled.
 
-### NOT Installed (Needed)
-- `expo-notifications` - Push notifications
-- `expo-task-manager` - Background tasks
-- `axios` or native fetch wrapper - API calls
+Reference:
+- [app.json](app.json)
+
+Risk:
+- Apple requires special entitlement/justification for critical alerts.
+- If not approved, app review may reject or delay release.
+
+### 4.2 Permission Timing Strategy
+Permissions are requested aggressively in startup flows.
+
+References:
+- [app/_layout.tsx](app/_layout.tsx)
+- [lib/location/permissions.ts](lib/location/permissions.ts)
+
+Risk:
+- App review and user trust are better when background location is requested contextually after clear user intent.
+
+### 4.3 Notification Done Action Is Partial
+Done action currently logs only and does not fully mutate reminder state.
+
+Reference:
+- [app/_layout.tsx](app/_layout.tsx)
+
+Risk:
+- Feature behavior may appear incomplete during QA/review.
+
+## 5. Non-Blocking Gaps (Polish / Quality)
+
+### 5.1 Lint Warnings
+Current lint run reports warnings (no hard errors):
+- [app/(tab)/settings.tsx](app/(tab)/settings.tsx)
+- [components/signUpScreen.tsx](components/signUpScreen.tsx)
+- [components/splashScreen.tsx](components/splashScreen.tsx)
+
+### 5.2 Explorer Action Stubs
+Some actions still show temporary alerts:
+- Edit
+- Duplicate
+- Share
+- Archive
+
+Reference:
+- [app/(tab)/explorer.tsx](app/(tab)/explorer.tsx)
+
+## 6. Environment and Secret Handling Status
+
+### 6.1 Positive
+- `.env` is gitignored.
+- Runtime API base URL configured for production backend.
+
+References:
+- [.gitignore](.gitignore)
+- [.env](.env)
+- [lib/api/client.ts](lib/api/client.ts)
+
+### 6.2 Needs Hardening
+- Build-time secrets and profile-specific env setup for EAS are not yet formalized.
+
+## 7. Recommended Next Steps (Priority Order)
+
+### Priority 1: Release Infrastructure
+1. Create [eas.json](eas.json) with `development`, `preview`, and `production` profiles.
+2. Add app identity/version fields to [app.json](app.json):
+   - `ios.bundleIdentifier`
+   - `android.package`
+   - `ios.buildNumber`
+   - `android.versionCode`
+
+### Priority 2: Production Config and Credentials
+1. Replace placeholder Google Maps keys in [app.json](app.json).
+2. Move release secrets to EAS environment/secrets.
+
+### Priority 3: Compliance Package
+1. Publish a privacy policy URL.
+2. Prepare App Store privacy responses.
+3. Prepare Play Console Data Safety form.
+4. Validate location permission rationale text against actual behavior.
+
+### Priority 4: Product Completeness for Review
+1. Implement real behavior for notification Done action.
+2. Decide whether critical alerts are truly required; remove if not required.
+3. Address lint warnings and remove noisy debug logs in release paths.
+
+### Priority 5: QA and Submission
+1. Perform device QA on iOS and Android release builds:
+   - Fresh install
+   - Login persistence across restart/offline
+   - Background location trigger
+   - Notification tap actions and snooze
+   - Logout/login cycle
+2. Build release binaries via EAS.
+3. Submit to App Store Connect and Play Console.
+
+## 8. Go/No-Go Decision
+
+Current decision: NO-GO for store submission.
+
+Reason:
+- Release build pipeline and store identity/version metadata are incomplete.
+
+Go-live condition:
+- Priority 1 and Priority 2 completed, then compliance package and QA sign-off done.
