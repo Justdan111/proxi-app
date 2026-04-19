@@ -11,7 +11,7 @@ export const BG_FETCH_TASK   = 'PROXI_BG_FETCH_TASK';
 const REMINDERS_CACHE_KEY    = 'proxi_reminders_cache';
 const TRIGGERED_CACHE_KEY    = 'proxi_triggered_cache';
 
-// ─── Cache reminders for background task ───────────────────
+// ─── Cache reminders for background task 
 // Background tasks can't use React context — they read from AsyncStorage
 export async function cacheRemindersForBackground(reminders: Reminder[]) {
   const enabled = reminders.filter(r => r.enabled);
