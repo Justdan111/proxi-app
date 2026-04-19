@@ -50,7 +50,7 @@ function isInTimeframe(timeframe?: { startTime: string; endTime: string }): bool
   return nowMins >= startMins && nowMins <= endMins;
 }
 
-// ─── Core proximity check logic ─────────────────────────────
+// ─── Core proximity check logic 
 async function checkProximity(userCoords: Coordinates) {
   const reminders   = await getCachedReminders();
   const triggeredIds = await getTriggeredIds();
