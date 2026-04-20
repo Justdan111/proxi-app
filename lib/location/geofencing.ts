@@ -139,7 +139,7 @@ TaskManager.defineTask(BG_FETCH_TASK, async () => {
   }
 });
 
-// ─── Start/Stop Tracking ─────────────────────────────────────
+// ─── Start/Stop Tracking 
 export async function startGeofencing() {
   // Start background location updates
   const isRegistered = await Location.hasStartedLocationUpdatesAsync(GEOFENCE_TASK)
