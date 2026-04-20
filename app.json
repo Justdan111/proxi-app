@@ -10,14 +10,14 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "config": {
-        "googleMapsApiKey": "YOUR_IOS_KEY"
-      },
       "infoPlist": {
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Proxi needs location to alert you near saved places.",
         "NSLocationAlwaysUsageDescription": "Proxi uses background location to detect when you enter a reminder area.",
         "NSLocationWhenInUseUsageDescription": "Proxi uses your location to show nearby reminders.",
-        "UIBackgroundModes": ["location", "fetch"],
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ],
         "UNAuthorizationOptionCriticalAlert": true
       }
     },
@@ -30,11 +30,6 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "config": {
-        "googleMaps": {
-          "apiKey": "YOUR_ANDROID_KEY"
-        }
-      },
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
@@ -64,7 +59,6 @@
           }
         }
       ],
-      "expo-maps",
       "expo-secure-store",
       [
         "expo-location",
@@ -81,7 +75,16 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#6366f1",
-          "sounds": ["./assets/sounds/proxi-alert.wav"]
+          "sounds": [
+            "./assets/sounds/proxi-alert.wav"
+          ]
+        }
+      ],
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsVersion": "11.0.0",
+          "RNMapboxMapsDownloadToken": "sk.your_secret_token_here"
         }
       ]
     ],
