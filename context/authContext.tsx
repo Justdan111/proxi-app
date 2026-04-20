@@ -87,7 +87,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await authApi.saveToken(result.token);
       await authApi.saveUser(result.user);
       setUser(result.user);
-      router.replace('/(tab)/home');
     } catch (err) {
       setError(getApiError(err));
     }
