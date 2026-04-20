@@ -102,7 +102,7 @@ async function checkProximity(userCoords: Coordinates) {
   }
 }
 
-// ─── Background Location Task ────────────────────────────────
+// ─── Background Location Task 
 // Fires every ~100m of movement or every few minutes
 TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }: any) => {
   if (error) {
@@ -120,7 +120,7 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }: any) => {
   });
 });
 
-// ─── Background Fetch Task ───────────────────────────────────
+// ─── Background Fetch Task 
 // Backup check every 15 minutes even without movement
 TaskManager.defineTask(BG_FETCH_TASK, async () => {
   try {
