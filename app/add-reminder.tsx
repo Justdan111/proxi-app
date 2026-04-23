@@ -1,28 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  SafeAreaView,
-  Modal,
-  Dimensions,
-} from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  Easing,
-  SlideInUp,
-  FadeInDown,
-} from 'react-native-reanimated';
-import { X, Check, Clock, Repeat, Repeat1 } from 'lucide-react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, SafeAreaView,  Modal, Dimensions, } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Easing,  SlideInUp, FadeInDown, } from 'react-native-reanimated';
+import { X, Check, Clock, Repeat, Repeat1, MapPin } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/context/themeContext';
 import { useReminders } from '@/context/reminderContext';
 import Svg, { Circle, G, Rect, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
+import ReminderMap from '@/components/maps/ReminderMap';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const MAP_SIZE = SCREEN_WIDTH - 80;
@@ -425,83 +409,35 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
             </View>
 
             {/* Map Visualization with Location */}
-            <View className="bg-card dark:bg-card-dark rounded-2xl p-4 items-center justify-center relative">
-              <Svg width={MAP_SIZE} height={MAP_SIZE} viewBox={`0 0 ${MAP_SIZE} ${MAP_SIZE}`}>
-                <Defs>
-                  <LinearGradient id="mapGradient2" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <Stop offset="0%" stopColor={isDark ? '#1f2937' : '#f3f4f6'} />
-                    <Stop offset="100%" stopColor={isDark ? '#111827' : '#e5e7eb'} />
-                  </LinearGradient>
-                </Defs>
-                
-                {/* Map Background */}
-                <Rect x="0" y="0" width={MAP_SIZE} height={MAP_SIZE} fill="url(#mapGradient2)" rx={12} />
-                
-                {/* Grid */}
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <G key={`grid2-${i}`}>
-                    <Circle
-                      cx={(i + 1) * (MAP_SIZE / 8)}
-                      cy={(i + 1) * (MAP_SIZE / 8)}
-                      r={2}
-                      fill={isDark ? '#374151' : '#d1d5db'}
-                    />
-                  </G>
-                ))}
+            <View className="rounded-2xl overflow-hidden" style={{ height: 220 }}>
+                {locationCoords ? (
+                  <ReminderMap
+                    center={locationCoords}
+                    radius={radius}
+                    height={220}
+                    // No onLocationSelect here — read-only preview
+                  />
+                ) : (
+                  <View className="h-full bg-card dark:bg-card-dark rounded-2xl items-center justify-center">
+                    <MapPin size={28} color="#6B7280" />
+                    <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm mt-3">
+                      Select a location to preview
+                    </Text>
+                  </View>
+                )}
 
-                {/* Location with radius */}
+                {/* Radius badge overlay */}
                 {locationCoords && (
-                  <G>
-                    {/* Radius circle */}
-                    <Circle
-                      cx={locationPos.x}
-                      cy={locationPos.y}
-                      r={Math.min(radiusInPixels, MAP_SIZE / 2 - 20)}
-                      fill="#00D4AA"
-                      fillOpacity={0.15}
-                      stroke="#00D4AA"
-                      strokeWidth={2}
-                      strokeDasharray="8,4"
-                    />
-                    {/* Location marker */}
-                    <Circle
-                      cx={locationPos.x}
-                      cy={locationPos.y}
-                      r={16}
-                      fill="#00D4AA"
-                    />
-                    <SvgText
-                      x={locationPos.x}
-                      y={locationPos.y + 5}
-                      textAnchor="middle"
-                      fontSize={12}
-                    >
-                      {locationIcon}
-                    </SvgText>
-                  </G>
-                )}
-
-                {/* No location placeholder */}
-                {!locationCoords && (
-                  <SvgText
-                    x={MAP_SIZE / 2}
-                    y={MAP_SIZE / 2}
-                    textAnchor="middle"
-                    fontSize={12}
-                    fill={isDark ? '#9CA3AF' : '#6B7280'}
+                  <View
+                    className="absolute top-3 left-3 bg-accent/90 dark:bg-accent-dark/90 px-3 py-1 rounded-full"
                   >
-                    Select a location
-                  </SvgText>
+                    <Text className="text-accent-foreground dark:text-accent-foreground-dark text-xs font-bold">
+                      {radius}m radius
+                    </Text>
+                  </View>
                 )}
-              </Svg>
-
-              {/* Radius indicator */}
-              <View className="absolute top-4 left-4 bg-accent/90 dark:bg-accent-dark/90 px-3 py-1 rounded-full">
-                <Text className="text-accent-foreground dark:text-accent-foreground-dark text-xs font-bold">
-                  {radius}m radius
-                </Text>
               </View>
-            </View>
+
           </Animated.View>
         </View>
       </ScrollView>
