@@ -7,6 +7,7 @@ import { useTheme } from '@/context/themeContext';
 import { useReminders } from '@/context/reminderContext';
 import Svg, { Circle, G, Rect, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import ReminderMap from '@/components/maps/ReminderMap';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const MAP_SIZE = SCREEN_WIDTH - 80;
@@ -99,28 +100,19 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
 
   const radiusOptions = [100, 300, 500];
 
-  // Map configuration for preview
-  const MAP_CONFIG = {
-    minLat: 9.0300,
-    maxLat: 9.1000,
-    minLon: 7.3800,
-    maxLon: 7.5200,
-  };
+  // Cache reminders for background tasks
+  useEffect(() => {
+    async function cacheRemindersForBackground(reminders: any[]) {
+      try {
+        await AsyncStorage.setItem('cachedReminders', JSON.stringify(reminders));
+      } catch (err) {
+        console.error('Error caching reminders for background:', err);
+      }
+    }
 
-  // Convert coordinates to map position
-  const coordsToMapPosition = (lat: number, lon: number) => {
-    const x = ((lon - MAP_CONFIG.minLon) / (MAP_CONFIG.maxLon - MAP_CONFIG.minLon)) * MAP_SIZE;
-    const y = ((MAP_CONFIG.maxLat - lat) / (MAP_CONFIG.maxLat - MAP_CONFIG.minLat)) * MAP_SIZE;
-    return { x, y };
-  };
-
-  // Get location position for map
-  const locationPos = locationCoords 
-    ? coordsToMapPosition(locationCoords.latitude, locationCoords.longitude)
-    : { x: MAP_SIZE / 2, y: MAP_SIZE / 2 };
-
-  // Calculate radius in pixels for map display
-  const radiusInPixels = (radius / 1000) * (MAP_SIZE / 0.14);
+    if (reminders.length > 0) {
+      void cacheRemindersForBackground(reminders);
+    }
 
   const startMinutes = parseTimeToMinutes(startTime);
   const endMinutes = parseTimeToMinutes(endTime);
