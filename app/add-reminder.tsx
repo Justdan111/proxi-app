@@ -1,16 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, SafeAreaView,  Modal, Dimensions, } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, SafeAreaView,  Modal } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Easing,  SlideInUp, FadeInDown, } from 'react-native-reanimated';
 import { X, Check, Clock, Repeat, Repeat1, MapPin } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/context/themeContext';
 import { useReminders } from '@/context/reminderContext';
-import Svg, { Circle, G, Rect, Text as SvgText, Defs, LinearGradient, Stop } from 'react-native-svg';
 import ReminderMap from '@/components/maps/ReminderMap';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const MAP_SIZE = SCREEN_WIDTH - 80;
 
 const TIME_24H_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -44,7 +40,7 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const router = useRouter();
   const { isDark } = useTheme();
-  const { createReminder, error: reminderError } = useReminders();
+  const { reminders, createReminder, error: reminderError } = useReminders();
   const params = useLocalSearchParams<{ 
     selectedLocation?: string; 
     selectedAddress?: string;
@@ -102,7 +98,7 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
 
   // Cache reminders for background tasks
   useEffect(() => {
-    async function cacheRemindersForBackground(reminders: any[]) {
+    async function cacheRemindersForBackground() {
       try {
         await AsyncStorage.setItem('cachedReminders', JSON.stringify(reminders));
       } catch (err) {
@@ -111,8 +107,9 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
     }
 
     if (reminders.length > 0) {
-      void cacheRemindersForBackground(reminders);
+      void cacheRemindersForBackground();
     }
+  }, [reminders]);
 
   const startMinutes = parseTimeToMinutes(startTime);
   const endMinutes = parseTimeToMinutes(endTime);
