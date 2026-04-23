@@ -1,20 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
+import { ActivityIndicator, RefreshControl, SafeAreaView, ScrollView, Text, TouchableOpacity,View,
 } from 'react-native';
-import Animated, {
-  Easing,
-  FadeInDown,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-  withTiming,
+import Animated, { Easing, FadeInDown, useAnimatedStyle, useSharedValue, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { AlertCircle, Bell, MapPin, RefreshCcw, Trash2 } from 'lucide-react-native';
 import { activitiesApi, Activity } from '@/lib/api';
