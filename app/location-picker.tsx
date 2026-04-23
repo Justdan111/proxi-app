@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  FlatList, ActivityIndicator, StyleSheet,
+  FlatList, ActivityIndicator, SafeAreaView, StyleSheet,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
-import debounce from 'lodash/debounce';
+import { debounce } from 'lodash';
+import { X, Search, MapPin } from 'lucide-react-native';
+import { useTheme } from '@/context/themeContext';
 import ReminderMap from '@/components/maps/ReminderMap';
 import { Coordinates } from '@/lib/location/distance';
 
@@ -15,40 +17,61 @@ interface MapboxFeature {
   id:         string;
   place_name: string;
   text:       string;
-  center:     [number, number]; // [longitude, latitude]
-  context?:   { id: string; text: string }[];
+  center:     [number, number];
 }
 
 export default function LocationPickerScreen() {
+  const { isDark } = useTheme();
   const [query,        setQuery]        = useState('');
   const [results,      setResults]      = useState<MapboxFeature[]>([]);
   const [searching,    setSearching]    = useState(false);
   const [selected,     setSelected]     = useState<Coordinates | null>(null);
   const [address,      setAddress]      = useState('');
   const [locationName, setLocationName] = useState('');
+  const [locating,     setLocating]     = useState(true);
 
-  // Start at user's current location
+  const c = isDark ? dark : light;
+
+  // Get accurate GPS on mount
   useEffect(() => {
     (async () => {
+      setLocating(true);
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
+      if (status !== 'granted') { setLocating(false); return; }
+
       const loc = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
+        accuracy: Location.Accuracy.High,
+        timeInterval: 5000,
+        distanceInterval: 0,
       });
-      setSelected({
+
+      const coords = {
         latitude:  loc.coords.latitude,
         longitude: loc.coords.longitude,
-      });
+      };
+      setSelected(coords);
+
+      try {
+        const url  = `https://api.mapbox.com/geocoding/v5/mapbox.places/${coords.longitude},${coords.latitude}.json?access_token=${MAPBOX_TOKEN}&limit=1`;
+        const res  = await fetch(url);
+        const json = await res.json();
+        const feature = json.features?.[0];
+        if (feature) {
+          setLocationName(feature.text);
+          setAddress(feature.place_name);
+        }
+      } catch {}
+
+      setLocating(false);
     })();
   }, []);
 
-  // Mapbox Geocoding API — free, no credit card
   const searchPlaces = useCallback(
     debounce(async (text: string) => {
       if (text.length < 2) { setResults([]); return; }
       setSearching(true);
       try {
-        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(text)}.json?access_token=${MAPBOX_TOKEN}&autocomplete=true&limit=5&language=en`;
+        const url  = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(text)}.json?access_token=${MAPBOX_TOKEN}&autocomplete=true&limit=5&language=en`;
         const res  = await fetch(url);
         const json = await res.json();
         setResults(json.features ?? []);
@@ -75,18 +98,14 @@ export default function LocationPickerScreen() {
     setResults([]);
   };
 
-  // User tapped directly on map
   const handleMapTap = async (coords: Coordinates) => {
     setSelected(coords);
     setResults([]);
-
-    // Mapbox reverse geocoding
     try {
       const url  = `https://api.mapbox.com/geocoding/v5/mapbox.places/${coords.longitude},${coords.latitude}.json?access_token=${MAPBOX_TOKEN}&limit=1`;
       const res  = await fetch(url);
       const json = await res.json();
-      const feature: MapboxFeature = json.features?.[0];
-
+      const feature = json.features?.[0];
       if (feature) {
         setLocationName(feature.text);
         setAddress(feature.place_name);
@@ -101,90 +120,177 @@ export default function LocationPickerScreen() {
   const confirmSelection = () => {
     if (!selected) return;
     router.back();
+    // ✅ Matches exactly what add-reminder.tsx reads
     router.setParams({
-      selectedLat:      String(selected.latitude),
-      selectedLng:      String(selected.longitude),
-      selectedAddress:  address,
       selectedLocation: locationName,
+      selectedAddress:  address,
+      selectedLat:      String(selected.latitude),
+      selectedLon:      String(selected.longitude),
     });
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.bg }]}>
+
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={[styles.iconBtn, { backgroundColor: c.card }]}
+          onPress={() => router.back()}
+        >
+          <X size={20} color={c.accent} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, { color: c.text, fontFamily: 'Courier' }]}>
+          CHOOSE LOCATION
+        </Text>
+        <View style={{ width: 40 }} />
+      </View>
+
       {/* Search bar */}
-      <View style={styles.searchBar}>
+      <View style={[styles.searchBar, { backgroundColor: c.card }]}>
+        <Search size={18} color={c.muted} style={{ marginRight: 10 }} />
         <TextInput
           value={query}
           onChangeText={handleQueryChange}
           placeholder="Search for a place..."
-          placeholderTextColor="#9ca3af"
-          style={styles.input}
-          autoFocus
+          placeholderTextColor={c.muted}
+          style={[styles.input, { color: c.text }]}
         />
-        {searching && <ActivityIndicator size="small" style={{ marginRight: 12 }} />}
+        {searching
+          ? <ActivityIndicator size="small" color={c.accent} />
+          : query.length > 0
+            ? <TouchableOpacity onPress={() => { setQuery(''); setResults([]); }}>
+                <X size={16} color={c.muted} />
+              </TouchableOpacity>
+            : null
+        }
       </View>
 
       {/* Autocomplete results */}
       {results.length > 0 && (
-        <FlatList
-          data={results}
-          keyExtractor={item => item.id}
-          style={styles.results}
-          keyboardShouldPersistTaps="handled"
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.resultItem}
-              onPress={() => selectPlace(item)}
-            >
-              <Text style={styles.resultMain}>{item.text}</Text>
-              <Text style={styles.resultSub} numberOfLines={1}>
-                {item.place_name}
-              </Text>
-            </TouchableOpacity>
-          )}
-        />
-      )}
-
-      {/* Map */}
-      {selected && (
-        <View style={styles.mapContainer}>
-          <ReminderMap
-            center={selected}
-            radius={300}
-            onLocationSelect={handleMapTap}
-            height={380}
+        <View style={[styles.resultsContainer, { backgroundColor: c.card, borderColor: c.border }]}>
+          <FlatList
+            data={results}
+            keyExtractor={item => item.id}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[styles.resultItem, { borderBottomColor: c.border }]}
+                onPress={() => selectPlace(item)}
+              >
+                <View style={[styles.resultIconWrap, { backgroundColor: c.accentFaint }]}>
+                  <MapPin size={14} color={c.accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.resultMain, { color: c.text }]}>{item.text}</Text>
+                  <Text style={[styles.resultSub,  { color: c.muted }]} numberOfLines={1}>
+                    {item.place_name}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            )}
           />
         </View>
       )}
 
-      {/* Address label */}
-      {address ? (
-        <Text style={styles.addressLabel} numberOfLines={2}>{address}</Text>
+      {/* Map */}
+      <View style={[styles.mapContainer, { borderColor: c.border }]}>
+        {locating ? (
+          <View style={[styles.mapPlaceholder, { backgroundColor: c.card }]}>
+            <ActivityIndicator size="large" color={c.accent} />
+            <Text style={[styles.locatingText, { color: c.muted }]}>
+              Getting your location...
+            </Text>
+          </View>
+        ) : selected ? (
+          <ReminderMap
+            center={selected}
+            radius={300}
+            onLocationSelect={handleMapTap}
+            height={320}
+          />
+        ) : null}
+      </View>
+
+      {/* Selected place pill */}
+      {locationName ? (
+        <View style={[styles.selectedPill, { backgroundColor: c.card, borderColor: c.border }]}>
+          <View style={[styles.pillDot, { backgroundColor: c.accentFaint }]}>
+            <MapPin size={12} color={c.accent} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.pillName, { color: c.text }]}>{locationName}</Text>
+            <Text style={[styles.pillAddress, { color: c.muted }]} numberOfLines={1}>
+              {address}
+            </Text>
+          </View>
+        </View>
       ) : null}
 
-      {/* Confirm button */}
+      {/* Confirm button — matches your rounded-full accent button */}
       <TouchableOpacity
-        style={[styles.confirm, !selected && styles.confirmDisabled]}
+        style={[
+          styles.confirm,
+          { backgroundColor: selected && !locating ? c.accent : c.card },
+        ]}
         onPress={confirmSelection}
-        disabled={!selected}
+        disabled={!selected || locating}
+        activeOpacity={0.8}
       >
-        <Text style={styles.confirmText}>Confirm Location</Text>
+        <Text style={[
+          styles.confirmText,
+          { color: selected && !locating ? c.accentForeground : c.muted },
+        ]}>
+          Confirm Location
+        </Text>
       </TouchableOpacity>
-    </View>
+
+    </SafeAreaView>
   );
 }
 
+// ── Theme tokens 
+const dark = {
+  bg:              '#0f0f0f',
+  card:            '#1a1a1a',
+  text:            '#ffffff',
+  muted:           '#6B7280',
+  border:          '#2a2a2a',
+  accent:          '#00D4AA',
+  accentFaint:     'rgba(0,212,170,0.15)',
+  accentForeground: '#0f0f0f',
+};
+
+const light = {
+  bg:              '#f9f9f9',
+  card:            '#ffffff',
+  text:            '#1a1a1a',
+  muted:           '#6B7280',
+  border:          '#e5e7eb',
+  accent:          '#00D4AA',
+  accentFaint:     'rgba(0,212,170,0.15)',
+  accentForeground: '#ffffff',
+};
+
 const styles = StyleSheet.create({
-  container:       { flex: 1, backgroundColor: '#fff' },
-  searchBar:       { flexDirection: 'row', alignItems: 'center', margin: 16, backgroundColor: '#f3f4f6', borderRadius: 12, paddingHorizontal: 12 },
-  input:           { flex: 1, height: 48, fontSize: 16, color: '#111' },
-  results:         { maxHeight: 220, marginHorizontal: 16, backgroundColor: '#fff', borderRadius: 12, elevation: 4, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
-  resultItem:      { padding: 14, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
-  resultMain:      { fontSize: 15, fontWeight: '600', color: '#111' },
-  resultSub:       { fontSize: 13, color: '#6b7280', marginTop: 2 },
-  mapContainer:    { marginHorizontal: 16, borderRadius: 16, overflow: 'hidden', marginTop: 8 },
-  addressLabel:    { marginHorizontal: 16, marginTop: 10, fontSize: 13, color: '#6b7280' },
-  confirm:         { margin: 16, backgroundColor: '#6366f1', borderRadius: 14, height: 52, alignItems: 'center', justifyContent: 'center' },
-  confirmDisabled: { opacity: 0.4 },
-  confirmText:     { color: '#fff', fontSize: 16, fontWeight: '700' },
+  container:      { flex: 1 },
+  header:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16 },
+  iconBtn:        { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  headerTitle:    { fontSize: 13, fontWeight: '700', letterSpacing: 3 },
+  searchBar:      { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 12, borderRadius: 16, paddingHorizontal: 16, height: 52 },
+  input:          { flex: 1, fontSize: 15 },
+  resultsContainer: { marginHorizontal: 20, borderRadius: 16, marginBottom: 10, maxHeight: 200, overflow: 'hidden', borderWidth: 1 },
+  resultItem:     { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1 },
+  resultIconWrap: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  resultMain:     { fontSize: 14, fontWeight: '600', marginBottom: 2 },
+  resultSub:      { fontSize: 12 },
+  mapContainer:   { marginHorizontal: 20, borderRadius: 20, overflow: 'hidden', borderWidth: 1 },
+  mapPlaceholder: { height: 320, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  locatingText:   { fontSize: 13 },
+  selectedPill:   { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginTop: 12, padding: 14, borderRadius: 16, borderWidth: 1 },
+  pillDot:        { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  pillName:       { fontSize: 14, fontWeight: '600' },
+  pillAddress:    { fontSize: 12, marginTop: 2 },
+  confirm:        { marginHorizontal: 20, marginTop: 16, marginBottom: 8, borderRadius: 100, height: 56, alignItems: 'center', justifyContent: 'center' },
+  confirmText:    { fontSize: 16, fontWeight: '700' },
 });
