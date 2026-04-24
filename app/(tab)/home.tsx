@@ -2,7 +2,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { ActivityIndicator, View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, SafeAreaView, } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Easing, FadeInDown, } from 'react-native-reanimated';
-import { Search, Bell, MapPin, Plus, Check } from 'lucide-react-native';
+import { Search, MapPin, Plus, Check } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import { useTheme } from '@/context/themeContext';
