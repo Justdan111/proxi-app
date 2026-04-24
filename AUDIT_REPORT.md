@@ -1,164 +1,153 @@
-# Proxi Deployment Audit Report
+# Proxi Launch Readiness Audit (Updated)
 
-Date: 18 April 2026
-Project: Proxi (Expo React Native)
+Date: 23 April 2026  
+Project: Proxi (Expo React Native)  
 Scope: Production readiness for Apple App Store and Google Play Store
+
+This report supersedes the previous audit dated 18 April 2026.
 
 ## 1. Executive Summary
 
-Proxi has moved beyond prototype stage and now includes real backend integration for authentication, reminders, and activity logs, plus live location and notification logic.
+Proxi has strong product and infrastructure progress and is close to release readiness, but it is **not yet ready** for store submission.
 
-The app is not yet ready for store deployment because release infrastructure and compliance configuration are incomplete.
+Current decision: **NO-GO**
 
-Main blockers are:
-- Missing EAS build configuration
-- Missing app identifiers and build version metadata in app config
-- Placeholder Google Maps API keys still present
-- Missing privacy/compliance deliverables for store submission
+Primary reasons:
+- Android release identity is incomplete (`android.package` not configured).
+- Notifications plugin references a missing icon asset.
+- Required Mapbox native build secret is not configured (`MAPBOX_DOWNLOADS_TOKEN`).
+- Compliance package (privacy policy + store privacy declarations) is not yet complete.
 
-## 2. What Is Implemented
+## 2. What Is Done
 
-### 2.1 Backend/API Integration
-Implemented and wired to API client:
-- Auth: signup, login, logout, me
-- Reminders: CRUD and toggle
-- Activity log: read and write
+### 2.1 Build and Release Infrastructure
+- EAS build profiles are implemented for development, preview, and production.
+- Production build auto-increment is configured.
+- EAS submit configuration exists.
 
-References:
-- [lib/api/auth.api.ts](lib/api/auth.api.ts)
-- [lib/api/reminders.api.ts](lib/api/reminders.api.ts)
-- [lib/api/activities.api.ts](lib/api/activities.api.ts)
-- [context/reminderContext.tsx](context/reminderContext.tsx)
+Reference:
+- [eas.json](eas.json)
 
-### 2.2 Session Persistence (Login Once)
-Implemented:
-- Token persisted in SecureStore
-- User persisted in AsyncStorage
-- Bootstrap restores cached user, refreshes profile when online
-- Forced logout only on confirmed 401 invalid session
+### 2.2 App Identity (Partial)
+- iOS bundle identifier is configured.
+
+Reference:
+- [app.json](app.json)
+
+### 2.3 Core Product Functionality
+Implemented and integrated:
+- Auth/session persistence
+- Reminder CRUD + toggle
+- Activity logging
+- Background geofencing flow
+- Notification categories and response listener wiring
+- Add reminder and location picker flows with corrected location param contract
 
 References:
 - [context/authContext.tsx](context/authContext.tsx)
-- [lib/api/auth.api.ts](lib/api/auth.api.ts)
-
-### 2.3 Location + Geofencing
-Implemented:
-- Foreground and background permission flow
-- Background location task and periodic fetch backup
-- Proximity checks and once/always reminder behavior
-
-References:
-- [lib/location/permissions.ts](lib/location/permissions.ts)
+- [context/reminderContext.tsx](context/reminderContext.tsx)
 - [lib/location/geofencing.ts](lib/location/geofencing.ts)
-
-### 2.4 Notifications
-Implemented:
-- Android notification channel
-- Custom sound support
-- Notification action categories (Done/Snooze)
-- Response listener wiring in app root
-
-References:
 - [lib/notifications/notifications.ts](lib/notifications/notifications.ts)
 - [app/_layout.tsx](app/_layout.tsx)
-- [app.json](app.json)
-
-### 2.5 Core Product Screens
-Implemented with live data:
-- Home: live distance and reminder state
-- Explorer: live distance and reminder listing from context
-- Activity: API-backed grouped timeline
-- Add reminder and location picker flows
-
-References:
-- [app/(tab)/home.tsx](app/(tab)/home.tsx)
-- [app/(tab)/explorer.tsx](app/(tab)/explorer.tsx)
-- [app/(tab)/activity.tsx](app/(tab)/activity.tsx)
 - [app/add-reminder.tsx](app/add-reminder.tsx)
 - [app/location-picker.tsx](app/location-picker.tsx)
 
-## 3. Deployment Blockers (Must Fix Before Store Release)
+### 2.4 Backend/API Production Defaults
+- Production API fallback is configured.
+- Token auth plumbing is in place.
 
-### 3.1 Missing EAS Build Configuration
-No EAS build profile file exists.
+Reference:
+- [lib/api/client.ts](lib/api/client.ts)
 
-Missing file:
-- [eas.json](eas.json)
+## 3. Remaining Launch Blockers (Must Fix)
 
-Impact:
-- Cannot run standardized cloud builds for release artifacts.
-
-### 3.2 Missing App Identity and Version Metadata
-Current app config is missing required store identity/version fields.
-
-In [app.json](app.json), missing:
-- `expo.ios.bundleIdentifier`
-- `expo.android.package`
-- `expo.ios.buildNumber`
-- `expo.android.versionCode`
+### 3.1 Missing Android Package Name
+`android.package` is not configured in Expo config.
 
 Impact:
-- Store binaries cannot be uniquely identified/versioned for submission and updates.
+- Play Store release identity is incomplete.
 
-### 3.3 Placeholder Google Maps Keys
-Current config contains placeholders:
-- `YOUR_ANDROID_KEY`
-- `YOUR_IOS_KEY`
+Fix:
+- Add `expo.android.package` in [app.json](app.json).
+
+### 3.2 Missing Notification Icon Asset
+Expo notifications plugin points to `./assets/notification-icon.png`, but file is missing.
+
+Impact:
+- Build/runtime notification icon issues and potential submission QA failures.
+
+Fix:
+- Add the asset at the configured path, or update the config to a real existing asset.
 
 Reference:
 - [app.json](app.json)
 
-Impact:
-- Map-related production behavior may fail or be rejected during review testing.
-
-### 3.4 Missing Legal/Compliance Assets
-No privacy policy file/link is present in repo.
-No App Store privacy details / Play Data Safety mapping artifacts found.
+### 3.3 Missing Mapbox Native Build Secret
+Resolved config check warns that `MAPBOX_DOWNLOADS_TOKEN` is not set.
 
 Impact:
-- Submission will stall during metadata/compliance steps.
+- Native iOS/Android builds with `@rnmapbox/maps` may fail during dependency install.
+
+Fix:
+- Add `MAPBOX_DOWNLOADS_TOKEN` to EAS secrets/environment for release builds.
+
+Reference:
+- [app.config.ts](app.config.ts)
+
+### 3.4 Compliance Deliverables Incomplete
+No privacy policy artifact/link was found in repo, and store privacy declarations are not yet documented as complete.
+
+Impact:
+- Store submission blocked or delayed during metadata/compliance review.
+
+Fix:
+- Publish privacy policy URL.
+- Complete App Store privacy labels.
+- Complete Play Console Data Safety form.
 
 ## 4. High-Risk Review Items
 
-### 4.1 Critical Alert Claim on iOS
+### 4.1 iOS Critical Alerts Flag Enabled
 `UNAuthorizationOptionCriticalAlert` is enabled.
+
+Risk:
+- Apple generally requires entitlement approval and clear justification for critical alerts.
+
+Action:
+- Remove unless absolutely required and approved.
 
 Reference:
 - [app.json](app.json)
 
-Risk:
-- Apple requires special entitlement/justification for critical alerts.
-- If not approved, app review may reject or delay release.
-
-### 4.2 Permission Timing Strategy
-Permissions are requested aggressively in startup flows.
-
-References:
-- [app/_layout.tsx](app/_layout.tsx)
-- [lib/location/permissions.ts](lib/location/permissions.ts)
+### 4.2 Notification "Done" Action Is Incomplete
+Current handler logs instead of applying a reminder state mutation.
 
 Risk:
-- App review and user trust are better when background location is requested contextually after clear user intent.
-
-### 4.3 Notification Done Action Is Partial
-Done action currently logs only and does not fully mutate reminder state.
+- Reviewer-visible functionality appears partial.
 
 Reference:
 - [app/_layout.tsx](app/_layout.tsx)
 
+### 4.3 Permission Timing Strategy
+Background/location permission request flow is startup-centric.
+
 Risk:
-- Feature behavior may appear incomplete during QA/review.
+- Higher review scrutiny and poorer user trust/conversion than contextual prompts.
 
-## 5. Non-Blocking Gaps (Polish / Quality)
+Reference:
+- [app/_layout.tsx](app/_layout.tsx)
 
-### 5.1 Lint Warnings
-Current lint run reports warnings (no hard errors):
+## 5. Quality and Polish Gaps (Non-Blocking but Recommended)
+
+### 5.1 Lint Status
+Current lint run reports 4 warnings (0 errors):
 - [app/(tab)/settings.tsx](app/(tab)/settings.tsx)
+- [app/location-picker.tsx](app/location-picker.tsx)
 - [components/signUpScreen.tsx](components/signUpScreen.tsx)
 - [components/splashScreen.tsx](components/splashScreen.tsx)
 
-### 5.2 Explorer Action Stubs
-Some actions still show temporary alerts:
+### 5.2 Explorer Screen Placeholder Actions
+The following actions still show "Coming soon" alerts:
 - Edit
 - Duplicate
 - Share
@@ -167,61 +156,30 @@ Some actions still show temporary alerts:
 Reference:
 - [app/(tab)/explorer.tsx](app/(tab)/explorer.tsx)
 
-## 6. Environment and Secret Handling Status
+## 6. Changes Since Previous Audit
 
-### 6.1 Positive
-- `.env` is gitignored.
-- Runtime API base URL configured for production backend.
+Resolved since the earlier report:
+- EAS build configuration is now present and valid.
+- Previous Google Maps placeholder-key blocker is outdated; current implementation uses Mapbox token flow.
 
-References:
-- [.gitignore](.gitignore)
-- [.env](.env)
-- [lib/api/client.ts](lib/api/client.ts)
+Updated map-related release blocker:
+- Ensure both runtime token (`EXPO_PUBLIC_MAPBOX_TOKEN`) and native download token (`MAPBOX_DOWNLOADS_TOKEN`) are configured in release environment.
 
-### 6.2 Needs Hardening
-- Build-time secrets and profile-specific env setup for EAS are not yet formalized.
+## 7. Final Go/No-Go Status
 
-## 7. Recommended Next Steps (Priority Order)
+Current decision: **NO-GO**
 
-### Priority 1: Release Infrastructure
-1. Create [eas.json](eas.json) with `development`, `preview`, and `production` profiles.
-2. Add app identity/version fields to [app.json](app.json):
-   - `ios.bundleIdentifier`
-   - `android.package`
-   - `ios.buildNumber`
-   - `android.versionCode`
+Go-live criteria:
+1. Configure `android.package` in [app.json](app.json).
+2. Fix notifications icon asset path/file mismatch.
+3. Set required Mapbox release secrets for EAS build.
+4. Complete privacy policy + App Store privacy + Play Data Safety.
+5. Run final physical-device QA on release builds and verify background location + notification action behavior.
 
-### Priority 2: Production Config and Credentials
-1. Replace placeholder Google Maps keys in [app.json](app.json).
-2. Move release secrets to EAS environment/secrets.
+## 8. Recommended Immediate Next Actions
 
-### Priority 3: Compliance Package
-1. Publish a privacy policy URL.
-2. Prepare App Store privacy responses.
-3. Prepare Play Console Data Safety form.
-4. Validate location permission rationale text against actual behavior.
-
-### Priority 4: Product Completeness for Review
-1. Implement real behavior for notification Done action.
-2. Decide whether critical alerts are truly required; remove if not required.
-3. Address lint warnings and remove noisy debug logs in release paths.
-
-### Priority 5: QA and Submission
-1. Perform device QA on iOS and Android release builds:
-   - Fresh install
-   - Login persistence across restart/offline
-   - Background location trigger
-   - Notification tap actions and snooze
-   - Logout/login cycle
-2. Build release binaries via EAS.
-3. Submit to App Store Connect and Play Console.
-
-## 8. Go/No-Go Decision
-
-Current decision: NO-GO for store submission.
-
-Reason:
-- Release build pipeline and store identity/version metadata are incomplete.
-
-Go-live condition:
-- Priority 1 and Priority 2 completed, then compliance package and QA sign-off done.
+1. Patch [app.json](app.json) for `android.package` and notification icon correctness.
+2. Add EAS secrets: `MAPBOX_DOWNLOADS_TOKEN` and `EXPO_PUBLIC_MAPBOX_TOKEN`.
+3. Remove or justify critical alerts usage before iOS submission.
+4. Implement full "Done" notification action behavior.
+5. Finish compliance package and submission metadata.

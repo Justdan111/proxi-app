@@ -357,9 +357,9 @@ export default function HomeScreen() {
               ) : null}
             </View>
           </View>
-          <TouchableOpacity className="bg-card dark:bg-card-dark rounded-full p-3 border border-border dark:border-border-dark">
+          {/* <TouchableOpacity className="bg-card dark:bg-card-dark rounded-full p-3 border border-border dark:border-border-dark">
             <Bell color={isDark ? '#00D4AA' : '#1a1a1a'} size={20} />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </Animated.View>
 
         {/* Search */}

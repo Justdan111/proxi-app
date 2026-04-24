@@ -206,7 +206,7 @@ export default function ActivityScreen() {
               Activity
             </Text>
             <Text className="text-muted-foreground dark:text-muted-foreground-dark text-base">
-              Recent reminder history from the API
+              Recent reminder events will appear here
             </Text>
           </Animated.View>
 
