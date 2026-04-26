@@ -11,7 +11,7 @@ import { Eye, EyeOff, ArrowRight, MapPin } from 'lucide-react-native';
 import { useAuth } from '@/context/authContext';
 
 type LogInScreenProps = {
-  onNavigate: (screen: 'welcome' | 'signup') => void;
+  onNavigate: (screen: 'welcome' | 'signup' | 'forgot-password') => void;
 };
 
 export default function LogInScreen({ onNavigate }: LogInScreenProps) {
@@ -166,6 +166,15 @@ export default function LogInScreen({ onNavigate }: LogInScreenProps) {
                 )}
               </TouchableOpacity>
             </View>
+            <TouchableOpacity
+              onPress={() => onNavigate('forgot-password')}
+              className="self-end mt-3"
+              disabled={loading}
+            >
+              <Text className="text-accent dark:text-accent-dark text-sm font-semibold">
+                Forgot password?
+              </Text>
+            </TouchableOpacity>
           </Animated.View>
         </View>
 
