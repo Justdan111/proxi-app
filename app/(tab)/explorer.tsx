@@ -18,19 +18,7 @@ import Animated, {
   FadeInDown,
   FadeIn,
 } from 'react-native-reanimated';
-import { 
-  Search,
-  MapPin, 
-  MoreVertical,
-  Edit,
-  Trash2,
-  Eye,
-  Copy,
-  Share2,
-  Archive,
-  Filter,
-  SortAsc,
-} from 'lucide-react-native';
+import {  Search, MapPin,  MoreVertical, Edit, Trash2, Eye, Copy, Share2, Archive, Filter, SortAsc, } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { useReminders } from '@/context/reminderContext';
 import type { Reminder } from '@/lib/api';
