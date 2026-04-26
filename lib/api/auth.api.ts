@@ -43,6 +43,10 @@ export interface LoginPayload {
   password: string;
 }
 
+export interface ForgotPasswordPayload {
+  email: string;
+}
+
 export const authApi = {
   signup: async (payload: SignupPayload): Promise<AuthResult> => {
     const { data } = await apiClient.post('/api/auth/signup', payload);
@@ -56,6 +60,10 @@ export const authApi = {
 
   logout: async (): Promise<void> => {
     await apiClient.post('/api/auth/logout');
+  },
+
+  forgotPassword: async (payload: ForgotPasswordPayload): Promise<void> => {
+    await apiClient.post('/api/auth/forgot-password', payload);
   },
 
   getMe: async (): Promise<User> => {

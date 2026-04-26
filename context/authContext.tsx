@@ -10,6 +10,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<boolean>;
   signup: (name: string, email: string, password: string) => Promise<void>;
+  forgotPassword: (email: string) => Promise<boolean>;
   logout: () => Promise<void>;
   error: string | null;
   clearError: () => void;
@@ -92,6 +93,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const forgotPassword = async (email: string) => {
+    setError(null);
+    try {
+      await authApi.forgotPassword({ email });
+      return true;
+    } catch (err) {
+      setError(getApiError(err));
+      return false;
+    }
+  };
+
   const logout = async () => {
     try {
       await authApi.logout();
@@ -112,6 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isAuthenticated: !!user,
       login,
       signup,
+      forgotPassword,
       logout,
       error,
       clearError: () => setError(null),
