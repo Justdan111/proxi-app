@@ -9,15 +9,7 @@ import {
   Modal,
   Alert,
 } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  Easing,
-  FadeInDown,
-  FadeIn,
-} from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle,  withTiming, withSpring, Easing, FadeInDown, FadeIn, } from 'react-native-reanimated';
 import {  Search, MapPin,  MoreVertical, Edit, Trash2, Eye, Copy, Share2, Archive, Filter, SortAsc, } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { useReminders } from '@/context/reminderContext';
