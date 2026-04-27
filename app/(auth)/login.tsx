@@ -6,7 +6,7 @@ export default function LoginRoute() {
   const router = useRouter();
 
   const handleNavigate = (screen: 'welcome' | 'signup' | 'forgot-password') => {
-    router.push((screen === 'welcome' ? '/(auth)' : `/(auth)/${screen}`) as Href);
+    router.push((screen === 'welcome' ? '/(auth)/index' : `/(auth)/${screen}`) as Href);
   };
 
   return <LogInScreen onNavigate={handleNavigate} />;
