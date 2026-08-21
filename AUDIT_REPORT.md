@@ -23,19 +23,33 @@ places where two correct-looking components disagree about a shared contract.
 Blockers fall into three groups:
 
 1. **Functional defects** that make the core promise of the app fail — most
-   critically, notification spam and `once` reminders that never complete.
+   critically, notification spam, `once` reminders that never complete, and an
+   alarm notification channel that has never once been applied (§3.9).
 2. **Store compliance gaps** — missing account deletion (a near-certain Apple
-   rejection), missing `android.package`, a missing asset, and an entitlement
-   the app is not approved for.
+   rejection), missing `android.package`, a missing asset, an entitlement the app
+   is not approved for, and an **Android target API level below Play's minimum
+   from 31 August 2026** (§4.8).
 3. **Account enrollment** — neither the Apple Developer Program nor Google Play
    Console account exists yet. This is the longest lead time in the project and
    is not something code can shorten.
+
+Two findings deserve particular attention because they invert expectations:
+
+- **The alarm behaviour is already built and simply never switched on.** The
+  `proxi-alarm` channel is correctly configured with MAX importance, DND bypass,
+  a custom sound, and a vibration pattern — but `channelId` is never passed, so
+  every notification has always used Android's default channel. One missing
+  property accounts for most of the gap between current behaviour and the intended
+  alarm experience (§3.9).
+- **The Expo upgrade is a release blocker, not maintenance.** SDK 54 targets
+  Android API 35; Play requires API 36 for new apps from 31 August 2026, and this
+  app's Play timeline lands well past that date (§4.8).
 
 ### Timeline reality
 
 | Milestone | Blocking factor | Realistic date |
 |---|---|---|
-| Code complete | Engineering only | Day 3 |
+| Code complete | Engineering only — now includes the SDK 57 upgrade (§5.7) | Day 4 |
 | Apple enrollment usable | 24–48h after applying, not compressible | Day 4–5 |
 | iOS submitted for review | Requires active Apple account | Day 4–5 |
 | Play closed testing starts | Requires verified Play account | Day 4–5 |
@@ -176,6 +190,60 @@ Writes to `cachedReminders`; the geofence reads `proxi_reminders_cache`.
 `AppInitializer` already handles this correctly. The entire effect is wasted work
 on every reminders change.
 
+### 3.9 The alarm notification channel is never applied — P0
+[lib/notifications/notifications.ts:22](lib/notifications/notifications.ts#L22)
+
+`setupNotificationChannel()` creates a `proxi-alarm` channel with MAX importance,
+`bypassDnd: true`, the custom sound, a vibration pattern, and lights. **None of it is
+ever used.**
+
+In `expo-notifications`, `channelId` is a property of the **trigger**, not the content.
+`sendReminderNotification` never sets it, and `app.json` declares no `defaultChannel`
+for the plugin. Every notification therefore lands on Android's *default* channel with
+default importance, the default sound, and no DND bypass.
+
+Impact: this is the primary reason notifications do not currently behave like an alarm.
+The configuration exists and is correct — it is simply never referenced.
+
+Fix: pass `channelId: 'proxi-alarm'` on the trigger, and set `defaultChannel` in the
+`expo-notifications` plugin config as a safety net.
+
+> **Android channel immutability:** once a channel is created on a device, its
+> importance, sound, and vibration are **immutable** — later code changes are ignored for
+> anyone who already installed the app. Any change to those properties requires a new
+> channel ID (`proxi-alarm-v2`). Budget for this when iterating on the alert sound.
+
+### 3.10 The full-screen notification helper does nothing — P2
+[lib/notifications/notifications.ts:96](lib/notifications/notifications.ts#L96)
+
+`sendFullScreenReminderNotification` is **never called**, and would not work if it were.
+It sets `sticky: true` and a `data.fullScreen` flag, neither of which produces an Android
+full-screen intent. `expo-notifications` exposes no full-screen intent API.
+
+`USE_FULL_SCREEN_INTENT` is declared in [app.json](app.json#L43), which gives the
+misleading impression the capability exists. Either delete the function or implement it
+properly via a custom config plugin (see §5.5).
+
+### 3.11 Snooze is unreliable on Android — P1
+[lib/notifications/notifications.ts:151](lib/notifications/notifications.ts#L151)
+
+`snoozeReminder` schedules a `TIME_INTERVAL` trigger 10 minutes out. `expo-notifications`
+deliberately does **not** declare `SCHEDULE_EXACT_ALARM`; the consuming app must add it.
+Without it, Android 12+ silently falls back to `setAndAllowWhileIdle`, which Doze can
+defer indefinitely. A "remind me in 10 minutes" may arrive an hour later, or not until
+the device is next unlocked.
+
+The snooze also never sets a `channelId`, so it inherits the same defect as §3.9.
+
+### 3.12 iOS interruption level requires an unobtainable entitlement — P0
+[lib/notifications/notifications.ts:82](lib/notifications/notifications.ts#L82)
+
+`interruptionLevel: 'critical'` requires the same Apple entitlement as §4.4 — weeks of
+lead time, granted almost exclusively to medical and public-safety apps.
+
+`'timeSensitive'` is available to **every** developer with no approval process, breaks
+through Focus modes, and is the correct level for this app. See §5.6.
+
 ## 4. Store Compliance Blockers
 
 ### 4.1 No account deletion — P0, near-certain rejection
@@ -218,9 +286,36 @@ requested at startup ([app/_layout.tsx:64](app/_layout.tsx#L64)) rather than
 contextually, which both weakens the justification and lowers grant rates. The
 purpose strings in `app.json` are well written and should be kept.
 
-## 5. Map Stack Migration
+### 4.8 Android target API level is below Play's minimum — P0
+Expo SDK 54 defaults to **`targetSdkVersion` 35** (Android 15), confirmed in
+`expo-modules-autolinking`'s Gradle plugin defaults.
 
-### 5.1 Decision
+Google Play requires new apps to target an API level released within the past year.
+API 36 (Android 16) becomes mandatory for new submissions on **31 August 2026** — ten
+days from this report. Play production access for this app is projected around day 20
+(mid-September), comfortably past the cutoff.
+
+Impact: submitting on API 35 after that date is rejected outright. This reclassifies the
+Expo upgrade from optional maintenance to a **release blocker**.
+
+Resolution: upgrade to **Expo SDK 57**, which targets API 36 natively. See §5.7.
+Verify the current requirement in Play Console before submitting — it states the required
+target level explicitly.
+
+### 4.9 Full-screen intent is a restricted permission — P1
+[app.json](app.json#L43) declares `USE_FULL_SCREEN_INTENT`. Since Android 14 (API 34) this
+is a **restricted** permission: it is auto-granted only to apps whose core function is
+alarms or calling. Everything else must route the user through
+`ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT`, and Google Play requires a policy declaration
+justifying it.
+
+Since nothing in the app actually uses a full-screen intent (§3.10), this permission is
+currently pure liability — it invites a Play policy question with no corresponding feature.
+Remove it unless §5.5 is implemented.
+
+## 5. Platform Migrations
+
+### 5.1 Map stack decision
 Migrate from `@rnmapbox/maps` to **`react-native-maps`** — Apple Maps on iOS,
 Google Maps on Android.
 
@@ -272,6 +367,86 @@ Also remove: `Mapbox.setAccessToken` at [app/_layout.tsx:101](app/_layout.tsx#L1
 and [components/maps/ReminderMap.tsx:12](components/maps/ReminderMap.tsx#L12), the
 `MAPBOX_DOWNLOADS_TOKEN` plugin dance in [app.config.ts](app.config.ts), and
 `EXPO_PUBLIC_MAPBOX_TOKEN` from `.env`.
+
+`react-native-maps` 1.29.0 declares `react-native >= 0.76.0`, so it is compatible with
+the SDK 57 target in §5.7.
+
+### 5.5 Alarm-style alerts: what each platform actually permits
+
+The product goal is an alert that behaves like an alarm when the app is closed. The
+platforms differ sharply in what they allow, and the distinction matters for scoping.
+
+| Capability | Android | iOS |
+|---|---|---|
+| Heads-up alert over the current screen | Yes — MAX importance channel | No equivalent |
+| Bypass Do Not Disturb / Focus | Yes — `bypassDnd` on the channel | Partial — `timeSensitive` breaks Focus |
+| Custom sound up to 30s | Yes | Yes |
+| Sustained vibration pattern | Yes | Fixed system patterns only |
+| **Full-screen lock-screen takeover** | Possible, but restricted (§4.9) and needs native code | **Not available to third-party apps** |
+
+**Conclusion:** a true full-screen alarm takeover is unavailable on iOS at any price. The
+nearest equivalent, `AlarmKit`, requires iOS 26+ and a bespoke native module, which would
+strand every user below iOS 26.
+
+The achievable target — and it is close to the felt experience of an alarm — is a MAX
+importance channel that bypasses DND, with a sustained custom sound and vibration, plus
+`timeSensitive` on iOS. Critically, **most of this is already configured and simply never
+applied** (§3.9). Fixing one missing `channelId` delivers the majority of the outcome.
+
+Android full-screen intent is therefore **deferred**, not rejected. It requires a custom
+config plugin, the Android 14+ restricted-permission flow, and a Play policy declaration
+that can itself delay review — poor value on a launch critical path.
+
+### 5.6 iOS interruption level
+Replace `interruptionLevel: 'critical'` with `'timeSensitive'`
+([lib/notifications/notifications.ts:82](lib/notifications/notifications.ts#L82)) and drop
+`allowCriticalAlerts` from the permission request
+([notifications.ts:44](lib/notifications/notifications.ts#L44)).
+
+`timeSensitive` needs no Apple approval, breaks through Focus modes, and can be surfaced
+to users in system settings. This resolves §4.4 and §3.12 together.
+
+### 5.7 Expo SDK 54 → 57 upgrade
+Required by §4.8. Latest stable is **57.0.15**; the project is on **54.0.33**.
+
+This is a larger jump than the version numbers suggest — **React Native 0.81.5 → 0.86.2**,
+five minor releases. Expo also moved to unified versioning at SDK 57, so every `expo-*`
+package renumbers to `57.x`:
+
+| Package | Current | SDK 57 |
+|---|---|---|
+| `react-native` | 0.81.5 | **0.86.2** |
+| `react` / `react-dom` | 19.1.0 | 19.2.3 |
+| `react-native-reanimated` | ~4.1.1 | 4.5.1 |
+| `react-native-worklets` | 0.5.1 | 0.10.1 |
+| `react-native-screens` | ~4.16.0 | ~4.26.0 |
+| `react-native-gesture-handler` | ~2.28.0 | ~2.32.0 |
+| `react-native-safe-area-context` | ^5.4.0 | ~5.7.0 |
+| `react-native-svg` | 15.12.1 | 15.15.4 |
+| `expo-location` | ~19.0.8 | ~57.0.12 |
+| `expo-notifications` | ~0.32.16 | ~57.0.13 |
+| `expo-router` | ~6.0.23 | ~57.0.15 |
+| `expo-task-manager` | ~14.0.9 | ~57.0.12 |
+| `expo-background-fetch` | ~14.0.9 | ~57.0.12 |
+
+Packages outside Expo's management that need manual verification: `nativewind` (4.2.1,
+latest 4.2.6 — declares no React Native ceiling), `@react-navigation/*` (v7, current range
+already covers the latest), `lucide-react-native` (on `^0.563.0`; latest is 1.33.0, a major
+bump — **leave pinned for launch**), `axios`, `lodash`.
+
+The heaviest risk concentrates in Reanimated and Worklets, which the app uses on every
+screen for entrance animations, and in NativeWind's Babel/Metro integration.
+
+### 5.8 Alert sound is a chime, not an alarm
+`assets/sounds/proxi-alert.wav` is 592KB of 16-bit stereo PCM at 44.1kHz — approximately
+**3.36 seconds**. That reads as a notification chime; an alarm needs sustained sound.
+
+iOS permits custom notification sounds up to **30 seconds**. Replace with a 20–30s
+alarm-style tone. Converting to mono roughly halves the file size at no perceptible cost
+for an alert tone.
+
+Note the channel immutability constraint in §3.9: on Android the sound is baked into the
+channel at creation, so changing it requires a new channel ID.
 
 ## 6. Routing Defects
 
@@ -381,6 +556,18 @@ low-value events and bury the `triggered` entries that matter.
 in `lib/api/client.ts` — it hardcodes `localhost:8080` for dev, which `client.ts`
 deliberately avoids because it produces 404s in Expo Go. Delete it.
 
+### 9.6 `expo-haptics` shipped but never used
+`expo-haptics` is declared in [package.json](package.json) and bundled into every build,
+but has **zero imports** anywhere in the codebase. The app ships the native module and uses
+none of it.
+
+This is a free win rather than a defect: haptic feedback is a dependency-free addition
+because the dependency is already paid for. See LAUNCH_PLAN.md for where it applies.
+
+One constraint worth recording: haptics require the app to be **foregrounded**. Feedback
+cannot be triggered from the background geofence task — the notification's vibration
+pattern is the only tactile channel available when the app is closed.
+
 ## 10. Security Review
 
 No credential leaks found.
@@ -399,10 +586,13 @@ No credential leaks found.
 1. All P0 defects in §3 resolved and verified on a physical device.
 2. Account deletion implemented end-to-end, including the backend endpoint (§4.1).
 3. `android.package` configured; notification icon asset present; Critical Alerts removed (§4.2–4.4).
-4. Map migration complete and radius overlay verified accurate (§5).
-5. Privacy policy published at a public URL; App Privacy labels and Play Data Safety complete (§4.6).
-6. Physical-device QA of background geofencing: app backgrounded, app terminated, device rebooted.
-7. Apple Developer Program and Google Play Console accounts active.
+4. **Expo SDK 57 upgrade complete; Android target API 36 confirmed in the build (§4.8, §5.7).**
+5. Map migration complete and radius overlay verified accurate (§5.1–5.4).
+6. **Notification channel verified applied on a physical device — MAX importance, DND
+   bypass, custom sound (§3.9); iOS `timeSensitive` confirmed (§5.6).**
+7. Privacy policy published at a public URL; App Privacy labels and Play Data Safety complete (§4.6).
+8. Physical-device QA of background geofencing: app backgrounded, app terminated, device rebooted.
+9. Apple Developer Program and Google Play Console accounts active.
 
 ## 12. Change Log Since 23 April 2026 Audit
 
@@ -430,10 +620,24 @@ No credential leaks found.
 - Three conflicting accent colours (§8.1)
 - Radius circle geographically inaccurate (§5.3)
 - Store accounts not yet enrolled — longest lead time in the project (§1)
+- **The alarm notification channel is never applied — `channelId` is never set, so MAX
+  importance, DND bypass, custom sound, and vibration have never once taken effect (§3.9)**
+- **Android target API 35 is below Play's 31 August 2026 minimum of API 36 (§4.8)**
+- `sendFullScreenReminderNotification` is non-functional and never called (§3.10)
+- Snooze falls back to inexact scheduling on Android and can be delayed indefinitely (§3.11)
+- iOS `interruptionLevel: 'critical'` requires an unobtainable entitlement (§3.12)
+- `USE_FULL_SCREEN_INTENT` declared but unused — Play policy liability with no feature (§4.9)
+- Alert sound is a 3.36s chime where an alarm tone is required (§5.8)
+- `expo-haptics` bundled into every build with zero imports (§9.6)
 
 **Superseded:**
 - Mapbox release blockers from the April audit are void. The Mapbox dependency is being
   removed entirely; neither `MAPBOX_DOWNLOADS_TOKEN` nor `EXPO_PUBLIC_MAPBOX_TOKEN` will
-  be required (§5).
+  be required (§5.1–5.4).
+- The April audit's "high-risk" framing of Critical Alerts (§4.1 in that report) is
+  resolved by a different route than it proposed: rather than seeking the entitlement,
+  the app drops to `timeSensitive`, which needs no approval and is the correct level
+  for a location reminder (§5.6).
 - The April audit's lint findings were re-checked. Current state is 8 TypeScript errors,
   all confined to `app.config.ts` and the archived `lib/simulation/` directory (§2.4).
+
