@@ -52,8 +52,11 @@ No `Co-Authored-By: Claude`, `Claude-Session:`, `Generated with Claude Code`, or
 similar trailer in commit messages, PR bodies, or PR comments. Verify before pushing:
 
 ```bash
-git log origin/main..HEAD --format='%B' | grep -ci "claude\|co-authored\|generated with"   # expect 0
+git log origin/main..HEAD --format='%B' | grep -iE "co-authored-by|generated with claude|claude-session|🤖"
 ```
+
+Expect no output. Match on the trailer patterns, not the bare word "claude" — the
+filename `CLAUDE.md` legitimately appears in commit messages and produces false positives.
 
 ---
 
