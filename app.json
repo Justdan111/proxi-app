@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "proxi",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -32,7 +31,6 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "ACCESS_FINE_LOCATION",
@@ -66,6 +64,9 @@
         }
       ],
       "expo-secure-store",
+      "expo-font",
+      "expo-image",
+      "expo-web-browser",
       [
         "expo-build-properties",
         {
