@@ -81,7 +81,7 @@
           "icon": "./assets/notification-icon.png",
           "color": "#6366f1",
           "sounds": [
-            "./assets/sounds/proxi-alert.wav"
+            "./assets/sounds/proxi_alert.wav"
           ]
         }
       ],
