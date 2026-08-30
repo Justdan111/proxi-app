@@ -132,14 +132,15 @@ and see whether completion survived — but does not require a device to answer.
 
 ### Code — from the 30 August re-audit (§13)
 
-Small, and all in this repository. Sequenced by what a tester would hit first.
+Small, and all in this repository. **Both P1s are fixed** — what remains is P2 and does not
+gate a tester build.
 
 | § | Item | Priority |
 |---|---|---|
-| **13.1** | Granting location permission outside the app never starts geofencing until a restart — re-check on foreground | **P1** |
-| **13.3** | The Activity tab never refreshes; reload on focus | **P1** |
 | **13.2** | Geofencing runs a foreground service and samples location with zero enabled reminders | P2 |
 | **13.5** | Four `console.log` calls ship, three still tagged `[v0]`, on swallowed error paths | P2 |
+| ~~13.1~~ | ~~Permission granted outside the app never starts geofencing~~ | **Fixed** |
+| ~~13.3~~ | ~~Activity tab never refreshes~~ | **Fixed** |
 | ~~13.4~~ | ~~Place-search debounce never cancelled~~ | **Fixed** |
 | ~~13.7~~ | ~~Six geocoding calls per keystroke burst~~ | **Fixed** |
 
@@ -935,7 +936,7 @@ None blocks submission; §13.1 and §13.3 should be fixed before testers get a b
 Two of these were **created or exposed by the launch-plan work itself**, which is noted
 where it applies — that is the more useful signal than the defect alone.
 
-### 13.1 Granting location permission outside the app never starts geofencing — P1
+### 13.1 Granting location permission outside the app never starts geofencing — P1 — **RESOLVED**
 
 [app/_layout.tsx:115–123](app/_layout.tsx#L115)
 
@@ -950,11 +951,17 @@ back in. No reminder fires, and nothing in the UI indicates why. This is the wor
 audience for a silent failure — the user who just went and enabled the permission on
 purpose.
 
-The pattern to copy is thirty lines above it: [app/_layout.tsx:96](app/_layout.tsx#L96)
-already re-runs on `AppState` `active` to refresh reminders. The permission check needs the
-same treatment — re-check on foreground, and start geofencing if it has since been granted.
-
 *Introduced by the day-3 change that moved permission prompts to first use.*
+
+**Resolved on `fix/geofence-restart-and-activity-refresh`.** The check is extracted as
+`syncGeofencing` and now runs on every foreground alongside the existing reminder re-fetch,
+not only at launch. It still never prompts — it reads the current answer and matches
+geofencing to it, which also covers the reverse case: permission **revoked** in system
+settings while the app is running now stops the task instead of leaving it registered.
+
+Because that call now happens on every foreground, `startGeofencing` had to become cheap to
+repeat. Its background-fetch registration is guarded by `TaskManager.isTaskRegisteredAsync`;
+previously it re-registered the task on every invocation.
 
 ### 13.2 Geofencing runs even with nothing to watch — P2
 
@@ -971,7 +978,7 @@ That is battery drain and a permanent notification in exchange for nothing, and 
 kind of thing reviewers and users both notice. Gate `startGeofencing` on there being at
 least one enabled reminder, and stop it when the last one is disabled or deleted.
 
-### 13.3 The Activity tab never refreshes — P1
+### 13.3 The Activity tab never refreshes — P1 — **RESOLVED**
 
 [app/(tab)/activity.tsx:107–111](app/(tab)/activity.tsx#L107)
 
@@ -987,6 +994,14 @@ turned a dormant bug into a visible one.
 
 Home already re-fetches on foreground ([app/_layout.tsx:96](app/_layout.tsx#L96)); Activity
 should reload on focus for the same reason.
+
+**Resolved on `fix/geofence-restart-and-activity-refresh`.** `useFocusEffect` reloads the
+feed whenever the tab is opened, and an `AppState` listener covers the case focus does not:
+returning to the foreground on a tab that is **already** showing, which is exactly when a
+geofence will have logged something while the user was elsewhere.
+
+Moving `load()` out of the mount effect also cleared the lint error this file carried at
+`activity.tsx:110`.
 
 ### 13.4 The place-search debounce is never cancelled — P2 — **RESOLVED**
 

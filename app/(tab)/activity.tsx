@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, RefreshControl, SafeAreaView, ScrollView, Text, TouchableOpacity,View,
+import { ActivityIndicator, AppState, RefreshControl, SafeAreaView, ScrollView, Text, TouchableOpacity,View,
 } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import Animated, { Easing, FadeInDown, useAnimatedStyle, useSharedValue, withSpring, withTiming,
 } from 'react-native-reanimated';
 import { AlertCircle, Bell, MapPin, RefreshCcw, Trash2 } from 'lucide-react-native';
@@ -107,8 +108,27 @@ export default function ActivityScreen() {
   useEffect(() => {
     headerOpacity.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.ease) });
     headerTranslateY.value = withSpring(0, { damping: 15, stiffness: 100 });
-    load();
-  }, [headerOpacity, headerTranslateY, load]);
+  }, [headerOpacity, headerTranslateY]);
+
+  // Reload every time the tab is opened. expo-router keeps tab screens mounted,
+  // so a mount-only fetch left this feed frozen at whatever was true the first
+  // time it rendered. That went unnoticed for as long as background activity
+  // logging was broken — nothing was arriving to be stale.
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load])
+  );
+
+  // Focus does not fire again when the app returns to the foreground on a tab
+  // that is already showing, which is exactly when a geofence will have logged
+  // something while the user was elsewhere.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void load();
+    });
+    return () => sub.remove();
+  }, [load]);
 
   const groupedActivities = useMemo<ActivityGroup[]>(() => {
     const groups = new Map<string, ActivityGroup>();
