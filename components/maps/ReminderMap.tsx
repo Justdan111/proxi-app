@@ -1,17 +1,7 @@
-import React, {  } from 'react';
-import { StyleSheet, View } from 'react-native';
-import Mapbox, {
-  MapView,
-  Camera,
-  PointAnnotation,
-  CircleLayer,
-  ShapeSource,
-  UserLocation,
-} from '@rnmapbox/maps';
+import React from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
+import MapView, { Circle, MapPressEvent, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Coordinates } from '@/lib/location/distance';
-
-// Set token once — do this at app root ideally
-Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN!);
 
 interface Props {
   center:            Coordinates;
@@ -26,81 +16,55 @@ export default function ReminderMap({
   onLocationSelect,
   height = 300,
 }: Props) {
-  // GeoJSON circle for the radius overlay
-  const circleGeoJSON: GeoJSON.Feature = {
-    type: 'Feature',
-    geometry: {
-      type: 'Point',
-      coordinates: [center.longitude, center.latitude],
-    },
-    properties: {},
-  };
-
-  const handleMapPress = (e: any) => {
+  const handleMapPress = (e: MapPressEvent) => {
     if (!onLocationSelect) return;
-    const [longitude, latitude] = e.geometry.coordinates;
-    onLocationSelect({ latitude, longitude });
+    onLocationSelect(e.nativeEvent.coordinate);
   };
 
   return (
     <View style={[styles.container, { height }]}>
       <MapView
         style={styles.map}
-        styleURL={Mapbox.StyleURL.Street}
+        // iOS falls through to Apple Maps, which needs no API key.
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+        region={regionForRadius(center, radius)}
         onPress={handleMapPress}
-        attributionEnabled={false}
-        logoEnabled={false}
+        showsUserLocation
+        showsMyLocationButton={false}
+        toolbarEnabled={false}
       >
-        {/* Camera — moves map to center */}
-        <Camera
-          centerCoordinate={[center.longitude, center.latitude]}
-          zoomLevel={radiusToZoom(radius)}
-          animationMode="flyTo"
-          animationDuration={600}
-        />
-
-        {/* Show user's current GPS dot */}
-        <UserLocation visible animated />
-
-        {/* Selected location pin */}
-        <PointAnnotation
-          id="selected"
-          coordinate={[center.longitude, center.latitude]}
-        >
+        <Marker coordinate={center} anchor={{ x: 0.5, y: 0.5 }}>
           <View style={styles.pin} />
-        </PointAnnotation>
+        </Marker>
 
-        {/* Radius circle */}
-        <ShapeSource id="radius-source" shape={circleGeoJSON}>
-          <CircleLayer
-            id="radius-fill"
-            style={{
-              circleRadius:       metresToPixels(radius),
-              circleColor:        'rgba(99, 102, 241, 0.15)',
-              circleStrokeColor:  'rgba(99, 102, 241, 0.7)',
-              circleStrokeWidth:  2,
-              circlePitchAlignment: 'map',
-            }}
-          />
-        </ShapeSource>
+        {/* Radius is in metres, so the overlay is geographically exact */}
+        <Circle
+          center={center}
+          radius={radius}
+          fillColor="rgba(99, 102, 241, 0.15)"
+          strokeColor="rgba(99, 102, 241, 0.7)"
+          strokeWidth={2}
+        />
       </MapView>
     </View>
   );
 }
 
-// Convert radius in metres to a Mapbox zoom level
-function radiusToZoom(radius: number): number {
-  if (radius <= 100)  return 17;
-  if (radius <= 300)  return 16;
-  if (radius <= 500)  return 15;
-  if (radius <= 1000) return 14;
-  return 13;
-}
+// Frame the circle with a margin so the whole radius stays on screen.
+function regionForRadius(center: Coordinates, radius: number) {
+  const METRES_PER_DEGREE_LAT = 111_320;
+  const span = (radius * 2.5) / METRES_PER_DEGREE_LAT;
+  const latitudeDelta = Math.max(span, 0.002);
 
-// Rough pixel conversion for circle radius at zoom 15
-// Mapbox CircleLayer radius is in pixels — this is an approximation
-function metresToPixels(metres: number): number {
-  return metres / 10;
+  // Longitude degrees shrink towards the poles.
+  const cosLat = Math.max(Math.cos((center.latitude * Math.PI) / 180), 0.01);
+
+  return {
+    latitude:      center.latitude,
+    longitude:     center.longitude,
+    latitudeDelta,
+    longitudeDelta: latitudeDelta / cosLat,
+  };
 }
 
 const styles = StyleSheet.create({
