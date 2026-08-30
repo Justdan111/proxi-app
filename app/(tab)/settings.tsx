@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -49,19 +49,28 @@ export default function SettingsScreen() {
     }, 200);
   }, []);
 
-  const syncNotificationPermission = useCallback(async () => {
-    const status = await checkPermissions();
-    setNotifications(status.notifications);
-  }, []);
-
   // Re-check on foreground: the user may have changed it in system settings.
   useEffect(() => {
-    void syncNotificationPermission();
+    let mounted = true;
+
+    const sync = () => {
+      checkPermissions()
+        .then((status) => {
+          if (mounted) setNotifications(status.notifications);
+        })
+        .catch(() => {});
+    };
+
+    sync();
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void syncNotificationPermission();
+      if (state === 'active') sync();
     });
-    return () => sub.remove();
-  }, [syncNotificationPermission]);
+
+    return () => {
+      mounted = false;
+      sub.remove();
+    };
+  }, []);
 
   const handleNotificationToggle = async (next: boolean) => {
     if (next) {

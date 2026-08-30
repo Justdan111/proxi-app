@@ -1,8 +1,8 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { ActivityIndicator, View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, SafeAreaView, } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Easing, FadeInDown, } from 'react-native-reanimated';
-import { Search, MapPin, Plus, Check } from 'lucide-react-native';
+import { ActivityIndicator, View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, SafeAreaView, Modal, Alert, } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Easing, FadeInDown, FadeIn, } from 'react-native-reanimated';
+import { Search, MapPin, Plus, Check, Trash2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import { useTheme } from '@/context/themeContext';
@@ -11,50 +11,23 @@ import type { Reminder } from '@/lib/api';
 import { Coordinates, getDistanceMetres, formatDistance } from '@/lib/location/distance';
 
 
+// Distance comes from the screen's single location watch. Each card used to
+// call getCurrentPositionAsync itself when it had no coordinates, which meant
+// one GPS fix per card on screen.
 function useDistanceToReminder(reminder: Reminder, currentCoordinates: Coordinates | null) {
-  const [distance, setDistance] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (currentCoordinates) {
-      const metres = getDistanceMetres(currentCoordinates, reminder.coordinates);
-      setDistance(formatDistance(metres));
-      return;
-    }
-
-    let mounted = true;
-
-    Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
-      .then((loc) => {
-        if (!mounted) return;
-
-        const metres = getDistanceMetres(
-          { latitude: loc.coords.latitude, longitude: loc.coords.longitude },
-          reminder.coordinates
-        );
-
-        setDistance(formatDistance(metres));
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setDistance(null);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [currentCoordinates, reminder.id, reminder.coordinates]);
-
-  return distance;
+  if (!currentCoordinates) return null;
+  return formatDistance(getDistanceMetres(currentCoordinates, reminder.coordinates));
 }
 
 type ReminderCardProps = {
   item: Reminder;
   index: number;
   onToggle: (id: string) => void;
+  onOpenDetails: (reminder: Reminder) => void;
   currentCoordinates: Coordinates | null;
 };
 
-function ReminderCard({ item, index, onToggle, currentCoordinates }: ReminderCardProps) {
+function ReminderCard({ item, index, onToggle, onOpenDetails, currentCoordinates }: ReminderCardProps) {
   const distance = useDistanceToReminder(item, currentCoordinates);
 
   return (
@@ -62,7 +35,11 @@ function ReminderCard({ item, index, onToggle, currentCoordinates }: ReminderCar
       entering={FadeInDown.delay(index * 100).springify()}
       className="px-6 pb-4"
     >
-      <View className="bg-card dark:bg-card-dark rounded-3xl p-5 border border-border dark:border-border-dark">
+      <TouchableOpacity
+        activeOpacity={0.9}
+        onPress={() => onOpenDetails(item)}
+        className="bg-card dark:bg-card-dark rounded-3xl p-5 border border-border dark:border-border-dark"
+      >
         {/* Top Section */}
         <View className="flex-row items-start justify-between mb-4">
           <View className="flex-row items-start flex-1 mr-4">
@@ -134,7 +111,7 @@ function ReminderCard({ item, index, onToggle, currentCoordinates }: ReminderCar
             </View>
           </View>
         )}
-      </View>
+      </TouchableOpacity>
     </Animated.View>
   );
 }
@@ -145,11 +122,13 @@ export default function HomeScreen() {
   const [currentCoordinates, setCurrentCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationLabel, setLocationLabel] = useState('Locating...');
   const [isLiveTracking, setIsLiveTracking] = useState(false);
+  const [selectedReminder, setSelectedReminder] = useState<Reminder | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
   const locationSubscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const lastGeocodeAtRef = useRef(0);
   const { isDark } = useTheme();
   const router = useRouter();
-  const { reminders, isLoading, error, toggleReminder, fetchReminders } = useReminders();
+  const { reminders, isLoading, error, toggleReminder, deleteReminder, fetchReminders } = useReminders();
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -329,6 +308,30 @@ export default function HomeScreen() {
     toggleReminder(id);
   };
 
+  const handleOpenDetails = (reminder: Reminder) => {
+    setSelectedReminder(reminder);
+    setShowDetails(true);
+  };
+
+  const handleDelete = (reminder: Reminder) => {
+    Alert.alert(
+      'Delete Reminder',
+      `Are you sure you want to delete "${reminder.title}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setShowDetails(false);
+            setSelectedReminder(null);
+            void deleteReminder(reminder.id);
+          },
+        },
+      ]
+    );
+  };
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return 'Good morning';
@@ -357,9 +360,6 @@ export default function HomeScreen() {
               ) : null}
             </View>
           </View>
-          {/* <TouchableOpacity className="bg-card dark:bg-card-dark rounded-full p-3 border border-border dark:border-border-dark">
-            <Bell color={isDark ? '#00D4AA' : '#1a1a1a'} size={20} />
-          </TouchableOpacity> */}
         </Animated.View>
 
         {/* Search */}
@@ -402,11 +402,46 @@ export default function HomeScreen() {
               tintColor="#00D4AA"
             />
           }
+          ListHeaderComponent={
+            reminders.length > 0 ? (
+              <Animated.View entering={FadeInDown.delay(200)} className="px-6 pb-4">
+                <View className="bg-accent/10 dark:bg-accent-dark/10 rounded-2xl p-4 border border-accent/20 dark:border-accent-dark/20">
+                  <View className="flex-row justify-around">
+                    <View className="items-center">
+                      <Text className="text-foreground dark:text-foreground-dark text-2xl font-bold">
+                        {reminders.length}
+                      </Text>
+                      <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs mt-1">
+                        Total
+                      </Text>
+                    </View>
+                    <View className="items-center">
+                      <Text className="text-accent dark:text-accent-dark text-2xl font-bold">
+                        {reminders.filter(r => r.enabled).length}
+                      </Text>
+                      <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs mt-1">
+                        Active
+                      </Text>
+                    </View>
+                    <View className="items-center">
+                      <Text className="text-muted-foreground dark:text-muted-foreground-dark text-2xl font-bold">
+                        {reminders.filter(r => !r.enabled).length}
+                      </Text>
+                      <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs mt-1">
+                        Disabled
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </Animated.View>
+            ) : null
+          }
           renderItem={({ item, index }) => (
             <ReminderCard
               item={item}
               index={index}
               onToggle={handleToggleReminder}
+              onOpenDetails={handleOpenDetails}
               currentCoordinates={currentCoordinates}
             />
           )}
@@ -416,20 +451,24 @@ export default function HomeScreen() {
               <View className="bg-card dark:bg-card-dark rounded-3xl p-8 items-center w-full">
                 <MapPin size={48} color="#00D4AA" />
                 <Text className="text-foreground dark:text-foreground-dark font-bold text-lg mt-4 mb-2">
-                  No reminders yet
+                  {search ? 'No reminders found' : 'No reminders yet'}
                 </Text>
                 <Text className="text-muted-foreground dark:text-muted-foreground-dark text-center mb-4">
-                  Create your first location-based reminder
+                  {search
+                    ? 'Try a different search'
+                    : 'Create your first location-based reminder'}
                 </Text>
-                <TouchableOpacity 
-                  onPress={() => router.push('/add-reminder')}
-                  className="bg-accent dark:bg-accent-dark px-6 py-3 rounded-full flex-row items-center"
-                >
-                  <Plus size={18} color={isDark ? '#1a1a1a' : '#ffffff'} style={{ marginRight: 6 }} />
-                  <Text className="text-accent-foreground dark:text-accent-foreground-dark font-bold">
-                    Add Reminder
-                  </Text>
-                </TouchableOpacity>
+                {search ? null : (
+                  <TouchableOpacity 
+                    onPress={() => router.push('/add-reminder')}
+                    className="bg-accent dark:bg-accent-dark px-6 py-3 rounded-full flex-row items-center"
+                  >
+                    <Plus size={18} color={isDark ? '#1a1a1a' : '#ffffff'} style={{ marginRight: 6 }} />
+                    <Text className="text-accent-foreground dark:text-accent-foreground-dark font-bold">
+                      Add Reminder
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           }
@@ -450,6 +489,97 @@ export default function HomeScreen() {
           </View>
         ) : null}
       </View>
+
+      {/* Details Modal */}
+      <Modal
+        visible={showDetails}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDetails(false)}
+      >
+        <TouchableOpacity
+          activeOpacity={1}
+          onPress={() => setShowDetails(false)}
+          className="flex-1 bg-background/90 dark:bg-background-dark/90 justify-center px-6"
+        >
+          <Animated.View entering={FadeIn.springify()} className="bg-card dark:bg-card-dark rounded-3xl p-6 border border-border dark:border-border-dark">
+            {selectedReminder && (
+              <>
+                <View className="items-center mb-6">
+                  <View className="bg-accent/20 dark:bg-accent-dark/20 rounded-3xl p-6 mb-4">
+                    <Text className="text-6xl">{selectedReminder.icon}</Text>
+                  </View>
+                  <Text className="text-foreground dark:text-foreground-dark text-2xl font-bold mb-2">
+                    {selectedReminder.title}
+                  </Text>
+                  <Text className="text-muted-foreground dark:text-muted-foreground-dark text-base">
+                    {selectedReminder.location}
+                  </Text>
+                </View>
+
+                <View className="gap-3 mb-6">
+                  <View className="bg-background dark:bg-background-dark rounded-2xl p-4">
+                    <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold uppercase mb-2">
+                      Address
+                    </Text>
+                    <Text className="text-foreground dark:text-foreground-dark">
+                      {selectedReminder.address}
+                    </Text>
+                  </View>
+
+                  <View className="flex-row gap-3">
+                    <View className="flex-1 bg-background dark:bg-background-dark rounded-2xl p-4">
+                      <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold uppercase mb-2">
+                        Radius
+                      </Text>
+                      <Text className="text-foreground dark:text-foreground-dark font-bold">
+                        {selectedReminder.radius}m
+                      </Text>
+                    </View>
+
+                    <View className="flex-1 bg-background dark:bg-background-dark rounded-2xl p-4">
+                      <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold uppercase mb-2">
+                        Frequency
+                      </Text>
+                      <Text className="text-foreground dark:text-foreground-dark font-bold">
+                        {selectedReminder.frequency}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View className="bg-background dark:bg-background-dark rounded-2xl p-4">
+                    <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold uppercase mb-2">
+                      Status
+                    </Text>
+                    <Text className={`font-bold ${selectedReminder.enabled ? 'text-accent dark:text-accent-dark' : 'text-muted-foreground dark:text-muted-foreground-dark'}`}>
+                      {selectedReminder.enabled ? 'Active' : 'Disabled'}
+                    </Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  onPress={() => handleDelete(selectedReminder)}
+                  className="flex-row items-center justify-center bg-destructive/10 dark:bg-destructive-dark/10 rounded-full py-4 mb-3 border border-destructive/20 dark:border-destructive-dark/20"
+                >
+                  <Trash2 size={18} className="text-destructive dark:text-destructive-dark" />
+                  <Text className="text-destructive dark:text-destructive-dark font-bold ml-2">
+                    Delete Reminder
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => setShowDetails(false)}
+                  className="bg-accent dark:bg-accent-dark rounded-full py-4 items-center"
+                >
+                  <Text className="text-accent-foreground dark:text-accent-foreground-dark font-bold">
+                    Close
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </Animated.View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }

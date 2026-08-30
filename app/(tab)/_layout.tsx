@@ -1,5 +1,5 @@
 import { Tabs, useRouter } from 'expo-router';
-import { Home, Clock, Settings, Plus, BookOpen } from 'lucide-react-native';
+import { Home, Clock, Settings, Plus } from 'lucide-react-native';
 import { useTheme } from '@/context/themeContext';
 import { View, TouchableOpacity } from 'react-native';
 
@@ -37,21 +37,13 @@ export default function AppLayout() {
           }}
         />
         <Tabs.Screen
-          name="explorer"
-          options={{
-            title: 'Explorer',
-            tabBarLabel: 'Explorer',
-            tabBarIcon: ({ color, size }) => <BookOpen color={color} size={size} />,
-            tabBarItemStyle: { marginRight: 30 },
-          }}
-        />
-        <Tabs.Screen
           name="activity"
           options={{
             title: 'Activity',
             tabBarLabel: 'Activity',
             tabBarIcon: ({ color, size }) => <Clock color={color} size={size} />,
-            tabBarItemStyle: { marginLeft: 30 },
+            // The margins that used to sit here existed only to dodge the
+            // floating action button between four tabs. Three tabs clear it.
           }}
         />
         <Tabs.Screen
