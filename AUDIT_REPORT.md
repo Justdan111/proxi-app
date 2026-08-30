@@ -149,14 +149,14 @@ read it before "fixing" any of them. With §13.4 fixed, lint is down to **6 prob
 
 ### Needs an asset
 
-| § | Item |
-|---|---|
-| **5.8** | The alert sound is still the original 3.36s stereo chime. Needs a 20–30s alarm tone (iOS caps custom sounds at 30s; export mono to halve the file at no perceptible cost) |
+| § | Item | Status |
+|---|---|---|
+| ~~5.8~~ | ~~The alert sound is a 3.36s chime~~ | **Fixed** — replaced with a 24s alarm tone; generator at `scripts/generate-alarm-tone.py` |
 
-**This is coupled to the Android channel ID.** A channel's sound is frozen at creation, so
-if the new sound lands *after* a build containing `proxi-alarm-v2` has reached any device,
-the channel must bump to `v3` (one constant, `ALARM_CHANNEL_ID`, plus `defaultChannel` in
-`app.json`). Land the sound before testers get a build, or plan the bump.
+**Nothing further is outstanding in this group.** The sound landed before any build was
+distributed, so no `proxi-alarm-v3` bump is needed — see §5.8. Test on a **clean install**;
+a device that ran a local build after day 2 merged may still hold a `proxi-alarm-v2` channel
+carrying the old chime, which device QA §0.3 already accounts for.
 
 ### Needs a physical device — §11.1, §11.5, §11.6, §11.8
 
@@ -582,16 +582,42 @@ bump — **leave pinned for launch**), `axios`, `lodash`.
 The heaviest risk concentrates in Reanimated and Worklets, which the app uses on every
 screen for entrance animations, and in NativeWind's Babel/Metro integration.
 
-### 5.8 Alert sound is a chime, not an alarm
-`assets/sounds/proxi-alert.wav` is 592KB of 16-bit stereo PCM at 44.1kHz — approximately
-**3.36 seconds**. That reads as a notification chime; an alarm needs sustained sound.
+### 5.8 Alert sound is a chime, not an alarm — **RESOLVED**
 
-iOS permits custom notification sounds up to **30 seconds**. Replace with a 20–30s
-alarm-style tone. Converting to mono roughly halves the file size at no perceptible cost
-for an alert tone.
+**The filename in the original finding was wrong.** It read `proxi-alert.wav`, with a
+hyphen. The file is `assets/sounds/proxi_alert.wav`, with an **underscore** — it was renamed
+in `6229e29` because **Android resource names reject hyphens**. That is worth stating
+plainly, because the failure is silent: a hyphenated sound produces no build error, no
+warning, and no log line. The channel simply falls back to the default notification sound.
+Anyone replacing this asset must keep to lowercase letters, digits and underscores.
 
-Note the channel immutability constraint in §3.9: on Android the sound is baked into the
-channel at creation, so changing it requires a new channel ID.
+The original finding stands otherwise. The file was 592KB of 16-bit **stereo** PCM at
+44.1kHz — approximately **3.36 seconds**, which reads as a notification chime. An alarm
+needs sustained sound.
+
+**Resolved on `fix/alarm-sound`.** Replaced with a synthesised **24.00s** tone: mono,
+16-bit, 44.1kHz, peaking at −1.0 dBFS. The pattern is four alternating tones — 880 Hz and
+1108 Hz, 0.22s each — then a 0.94s rest, repeating every 2 seconds for twelve cycles.
+
+Three constraints shaped it, recorded here so a future replacement does not lose them:
+
+- **30 seconds is iOS's hard cap** for a custom notification sound. 24s leaves headroom.
+- **Fundamentals sit between 800 Hz and 1.2 kHz.** Phone speakers roll off below roughly
+  500 Hz, so a lower tone loses most of its level on the device that has to play it.
+- **A pure sine is easy to miss on a small speaker**, so each tone carries a 2nd and 3rd
+  harmonic at reduced level — enough edge to cut through ambient noise without being shrill.
+
+The generator is checked in at [scripts/generate-alarm-tone.py](scripts/generate-alarm-tone.py)
+rather than only the WAV, so the pattern can be retuned without reverse-engineering an audio
+file. Mono keeps it to 2.0MB at 44.1kHz; dropping to 22.05kHz would halve that with no
+perceptible loss for a tone this simple, if bundle size ever matters.
+
+**On the channel immutability constraint (§3.9):** Android bakes a channel's sound in at
+creation, so swapping this file after a build has reached a device leaves that device on the
+old sound permanently. **No bump to `proxi-alarm-v3` is needed** — the sound landed before
+any build was distributed. A device that ran a local build after day 2 merged may hold a
+`proxi-alarm-v2` channel carrying the old chime; a clean install clears it, which device QA
+§0.3 already requires for exactly this reason.
 
 ## 6. Routing Defects
 
