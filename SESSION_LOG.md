@@ -9,6 +9,56 @@ blockers, and intent — the things that are not recoverable from the diff.
 
 ---
 
+## 2026-08-30 — Day 2: alarm channel, geofence correctness, haptics
+
+**Branch:** `day2/alarm-notifications-and-geofencing` → PR #3 (open, awaiting review)
+
+### Base branch deviation — read this first
+CLAUDE.md says branch each day off `main`. Day 2 is instead stacked on
+`day1/expo-57-upgrade`, because PR #2 has not merged and `main` therefore contains
+neither SDK 57 nor the §1.4 configuration that §2.4 and §2.8 build on. **PR #3 must merge
+after PR #2.** Once #2 lands, #3 rebases onto `main` cleanly.
+
+### Completed
+- §2.1 notification spam, §2.2 token/base-URL mismatch, §2.3 `once` completion sync,
+  §2.4 alarm channel, §2.5 iOS interruption level, §2.7 haptics, §2.8 remaining fixes.
+- `tsc --noEmit` clean, `expo-doctor` 21/21, lint unchanged at 16 problems.
+
+### Decisions made
+| Decision | Chosen | Why |
+|---|---|---|
+| Background API calls | Use `activitiesApi` / `remindersApi` directly | The plan proposed extracting a shared `getAuthToken()`. The existing axios client already reads SecureStore in its interceptor and resolves the base URL, so calling it achieves §2.2's stated goal with no new code. |
+| Geofence state shape | Two sets — `occupied` and `notified` | Occupancy alone loses the case where a fence is entered *outside* its timeframe: it would become occupied, never notify, and never re-transition. Splitting them means the alert is owed and fires when the window opens. |
+| `once` completion call | `update({ triggered, enabled: false })`, falling back to `toggle` | The badge reads the server's `triggered`. See the blocked item below — the backend may not accept the field. |
+
+### Blocked
+- **`triggered` may not be accepted by `PUT /api/reminders/:id`.** `UpdateReminderPayload`
+  was extended locally, but the backend is a separate service and this could not be
+  verified from here. If it rejects or ignores the field, the fallback still auto-disables
+  the reminder but the Completed badge stays hidden. **Needs a backend confirmation.**
+- **§2.6 alarm sound not done.** Still the original 3.36s stereo chime; §5.8 wants a
+  20–30s tone. Producing audio is outside what can be done in the repo.
+  **This is coupled to the channel id:** `proxi-alarm-v2` is created by this branch, and
+  Android freezes a channel's sound at creation. If the sound is replaced *after* any
+  device has installed a build containing v2, the channel must bump to v3. Land the sound
+  before this reaches testers, or plan the bump.
+- `DELETE /api/auth/me`, store enrollment, and the 12 Play testers are all unchanged from
+  the previous entry. The 14-day clock still has not started.
+
+### Not verified
+No physical-device QA, for day 1 or day 2. Everything in the Day 2 acceptance list is
+device work: one notification per fence entry, the channel confirmed in Android's
+per-channel settings, DND bypass with DND actually on, `timeSensitive` under a Focus mode,
+Done and Snooze on both platforms, snooze accuracy under Doze.
+
+### Next action
+**Wait for Dan's review of PR #2, then PR #3.** Merge #2 first. Before merging either,
+run `npx expo prebuild --clean` and exercise the Day 1 and Day 2 acceptance lists on a
+physical device. Day 3 is `day3/screen-consolidation-and-compliance`, and its §3.3 is
+blocked on the backend deletion endpoint.
+
+---
+
 ## 2026-08-30 — Day 1: SDK 57 upgrade completed and Mapbox removed
 
 **Branch:** `day1/expo-57-upgrade` → PR #2 (open, awaiting review)

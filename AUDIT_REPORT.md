@@ -596,6 +596,38 @@ No credential leaks found.
 
 ## 12. Change Log Since 23 April 2026 Audit
 
+**Resolved on `day2/alarm-notifications-and-geofencing` (30 August 2026):**
+- **§3.9 — the alarm channel now actually applies.** `channelId` moved to the trigger on
+  both senders; the channel id is a constant and bumped to `proxi-alarm-v2`, with the
+  superseded channel deleted.
+- §3.1 — notification spam fixed. Occupancy tracking with a `radius x 1.15` exit ring;
+  notifies only on the outside-to-inside transition.
+- §3.2 — background activity logging now goes through the shared API client, so it reads
+  the JWT from SecureStore rather than AsyncStorage and resolves the base URL correctly.
+- §3.3 — `once` completion persists to the server (`triggered` and `enabled`), with a
+  toggle fallback, plus a foreground re-fetch so the badge is not stale.
+- §3.4 — `categoryIdentifier` moved out of the Android-only spread, so Done and Snooze
+  render on iOS.
+- §3.5 — the Done action performs a real mutation instead of a `console.log`.
+- §3.8 — dead `cachedReminders` write removed.
+- §3.10 — `sendFullScreenReminderNotification` deleted.
+- §3.12 / §5.6 — iOS drops to `interruptionLevel: 'timeSensitive'`; `allowCriticalAlerts`
+  removed from the permission request.
+- §9.5 — unused `lib/config.ts` deleted.
+- §9.6 — `expo-haptics` wired through a `lib/haptics.ts` wrapper.
+- **Latent bug found while fixing §3.9:** the notification payload carried only
+  `reminderId`, but the response listener destructures `reminderTitle`, `location`, and
+  `icon` from it — so snoozing produced a notification with `undefined` fields. All four
+  are now written.
+
+**Still open after day 2:**
+- §5.8 — the alert sound is still the 3.36s stereo chime. A 20–30s alarm tone is an
+  audio asset that has to be produced outside this repo. **This blocks the channel id:**
+  replacing the sound after `proxi-alarm-v2` exists on a device requires a `v3` bump,
+  because Android freezes a channel's sound at creation.
+- §3.11 — `SCHEDULE_EXACT_ALARM` is declared and snooze passes the channel, but the
+  under-Doze timing check is physical-device work.
+
 **Resolved on `day1/expo-57-upgrade` (30 August 2026):**
 - Expo SDK 54 → 57, React Native 0.81.5 → 0.86.3; Android now targets API 36 via
   `expo-build-properties`, clearing Play's 31 August 2026 minimum (§4.8, §5.7).
