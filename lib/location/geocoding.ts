@@ -57,16 +57,31 @@ const nativeGeocoder: GeocodingProvider = {
     if (trimmed.length < 2) return [];
 
     const matches = await Location.geocodeAsync(trimmed);
-    const top = matches.slice(0, MAX_RESULTS);
+    if (!matches.length) return [];
 
-    // geocodeAsync yields coordinates only, so label each one by reversing it.
-    return Promise.all(
-      top.map(async (m) => {
+    const [first, ...rest] = matches.slice(0, MAX_RESULTS);
+    const firstCoords = { latitude: first.latitude, longitude: first.longitude };
+
+    // geocodeAsync yields coordinates without labels, so the top hit is named by
+    // reversing it — but only the top hit. Reversing every result meant up to
+    // five extra calls per keystroke burst, issued concurrently, which is the
+    // exact pattern the platform geocoders throttle. Whichever result the user
+    // picks is labelled properly on selection instead, which is one call on a
+    // deliberate action rather than five on every keystroke.
+    let head: PlaceResult;
+    try {
+      head = (await nativeGeocoder.reverse(firstCoords)) ?? { ...fallback(firstCoords), name: trimmed };
+    } catch {
+      head = { ...fallback(firstCoords), name: trimmed };
+    }
+
+    return [
+      head,
+      ...rest.map((m) => {
         const coords = { latitude: m.latitude, longitude: m.longitude };
-        const labelled = await nativeGeocoder.reverse(coords);
-        return labelled ?? { ...fallback(coords), name: trimmed };
-      })
-    );
+        return { ...fallback(coords), name: trimmed };
+      }),
+    ];
   },
 
   async reverse(coords: Coordinates): Promise<PlaceResult | null> {

@@ -101,11 +101,13 @@ Small, and all in this repository. Sequenced by what a tester would hit first.
 | **13.1** | Granting location permission outside the app never starts geofencing until a restart — re-check on foreground | **P1** |
 | **13.3** | The Activity tab never refreshes; reload on focus | **P1** |
 | **13.2** | Geofencing runs a foreground service and samples location with zero enabled reminders | P2 |
-| **13.4** | The place-search debounce is never cancelled, and `useCallback` re-allocates it every render | P2 |
 | **13.5** | Four `console.log` calls ship, three still tagged `[v0]`, on swallowed error paths | P2 |
+| ~~13.4~~ | ~~Place-search debounce never cancelled~~ | **Fixed** |
+| ~~13.7~~ | ~~Six geocoding calls per keystroke burst~~ | **Fixed** |
 
 §13.6 records which lint errors are real and which are a rule firing on a correct pattern —
-read it before "fixing" any of them.
+read it before "fixing" any of them. With §13.4 fixed, lint is down to **6 problems
+(3 errors, 3 warnings)**, and every remaining one is in the accepted category.
 
 ### Needs an asset
 
@@ -922,7 +924,7 @@ turned a dormant bug into a visible one.
 Home already re-fetches on foreground ([app/_layout.tsx:96](app/_layout.tsx#L96)); Activity
 should reload on focus for the same reason.
 
-### 13.4 The place-search debounce is never cancelled — P2
+### 13.4 The place-search debounce is never cancelled — P2 — **RESOLVED**
 
 [app/location-picker.tsx:61–74](app/location-picker.tsx#L61)
 
@@ -939,8 +941,9 @@ Two problems in one line:
    allocating a fresh debounced function that `useCallback` then discards. This is what the
    remaining lint error at `location-picker.tsx:62` is reporting.
 
-Fix both by creating the debounced function in a `useEffect`/`useRef` and cancelling it in
-the cleanup.
+**Resolved on `fix/geocoding-request-volume`.** The debounced function is built once inside
+an effect, held in a ref, and cancelled in the cleanup, with a closure guard on every
+`setState` that follows an `await`. `location-picker.tsx` is now entirely lint-clean.
 
 ### 13.5 Scaffold debug logging ships to production — P2
 
@@ -958,18 +961,44 @@ These are swallowed error paths, so they also hide real failures behind a log li
 or crash reporter will see. The `console.warn`/`console.error` calls in `themeContext.tsx`
 and `geofencing.ts` are deliberate and should stay.
 
-### 13.6 Lint state — 4 errors, 4 warnings
+### 13.7 Place search issued six geocoding calls per keystroke burst — P1 — **RESOLVED**
+
+[lib/location/geocoding.ts](lib/location/geocoding.ts)
+
+Found while answering whether Apple Maps covers everything the app needs. It does — but
+place search does not go through MapKit at all. It goes through `expo-location`'s
+`geocodeAsync`, which is **CLGeocoder** on iOS and the platform geocoder on Android, and
+both throttle.
+
+`geocodeAsync` returns coordinates with no labels, so `search()` reverse-geocoded every
+result to name it — up to five extra calls, issued **concurrently** through `Promise.all`,
+on top of the forward call. Six requests per debounced keystroke burst.
+
+`expo-location`'s own documentation warns that "creating too many requests at a time can
+result in an error". This is precisely that pattern, and its failure mode is quietly
+misleading: **throttled search looks identical to a geocoder with poor coverage.** Left in
+place, the first iOS test would have measured our request volume and been read as a verdict
+on Apple's data — the exact judgement that decides whether Google Places (§5.2) stops being
+a fast-follow and becomes required.
+
+**Resolved on `fix/geocoding-request-volume`.** Only the top hit is reverse-geocoded, and
+sequentially — two calls per search rather than six concurrent. Results beyond the first
+carry the query as their label and are named properly when chosen, which is one call on a
+deliberate action instead of five on every keystroke.
+
+### 13.6 Lint state — now 3 errors, 3 warnings
 
 Not all of these are defects, and the distinction matters so nobody "fixes" the wrong ones.
 
-**Accepted — a rule firing on a pattern that is correct here.** Three of the four errors are
+**Accepted — a rule firing on a pattern that is correct here.** All three remaining errors are
 `Calling setState synchronously within an effect`, raised on Reanimated shared-value writes
 (`headerOpacity.value = withTiming(...)`) in `activity.tsx:110`, `home.tsx:254` and on the
 draft-consuming effect in `add-reminder.tsx:64`. `reactCompiler: true` is enabled in
 `app.json`, and this is the documented way to drive Reanimated entrance animations. Leave
 them.
 
-**Real — see §13.4.** `location-picker.tsx:62`, the non-inline `useCallback`.
+**Real — was `location-picker.tsx:62`, the non-inline `useCallback`. Fixed; see §13.4.**
+That file is now entirely lint-clean.
 
 **Warnings** are all `exhaustive-deps` on Reanimated shared values, which are stable
 references by design. Harmless.

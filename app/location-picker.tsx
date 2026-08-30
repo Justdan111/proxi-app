@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   FlatList, ActivityIndicator, SafeAreaView,
@@ -19,6 +19,10 @@ const MUTED = '#6B7280';
 
 export default function LocationPickerScreen() {
   const { setDraft } = useLocationDraft();
+  // Guards every setState that follows an await, so a screen closed mid-request
+  // does not write into a component that is gone.
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
   const [query,        setQuery]        = useState('');
   const [results,      setResults]      = useState<PlaceResult[]>([]);
   const [searching,    setSearching]    = useState(false);
@@ -58,32 +62,61 @@ export default function LocationPickerScreen() {
     })();
   }, []);
 
-  const searchPlaces = useCallback(
-    debounce(async (text: string) => {
+  // Built once in an effect and cancelled on unmount. Previously this was
+  // useCallback(debounce(...), []), which built a fresh debounced function on
+  // every render only to discard it, and left a pending search able to resolve
+  // into state after the screen had closed.
+  const searchRef = useRef<ReturnType<typeof debounce> | null>(null);
+
+  useEffect(() => {
+    let live = true;
+
+    const run = debounce(async (text: string) => {
       if (text.length < 2) { setResults([]); return; }
       setSearching(true);
       try {
-        setResults(await geocoder.search(text));
+        const found = await geocoder.search(text);
+        if (live) setResults(found);
       } catch {
-        setResults([]);
+        if (live) setResults([]);
       } finally {
-        setSearching(false);
+        if (live) setSearching(false);
       }
-    }, 400),
-    []
-  );
+    }, 400);
+
+    searchRef.current = run;
+
+    return () => {
+      live = false;
+      run.cancel();
+      searchRef.current = null;
+    };
+  }, []);
 
   const handleQueryChange = (text: string) => {
     setQuery(text);
-    searchPlaces(text);
+    searchRef.current?.(text);
   };
 
-  const selectPlace = (place: PlaceResult) => {
+  const selectPlace = async (place: PlaceResult) => {
     setSelected(place.coordinates);
     setLocationName(place.name);
     setAddress(place.address);
     setQuery(place.name);
     setResults([]);
+
+    // Only results beyond the first arrive unlabelled, so this is where they get
+    // a real address — one geocoder call on a deliberate choice, rather than one
+    // per result on every keystroke.
+    try {
+      const exact = await geocoder.reverse(place.coordinates);
+      if (!exact || !mountedRef.current) return;
+      setLocationName(exact.name);
+      setAddress(exact.address);
+      setQuery(exact.name);
+    } catch {
+      // Keep what the search gave us.
+    }
   };
 
   const handleMapTap = async (coords: Coordinates) => {
@@ -160,7 +193,7 @@ export default function LocationPickerScreen() {
             renderItem={({ item }) => (
               <TouchableOpacity
                 className="flex-row items-center p-3.5 border-b border-border dark:border-border-dark"
-                onPress={() => selectPlace(item)}
+                onPress={() => { void selectPlace(item); }}
               >
                 <View className="w-8 h-8 rounded-full items-center justify-center mr-3 bg-accent/20 dark:bg-accent-dark/20">
                   <MapPin size={14} color={ACCENT} />
