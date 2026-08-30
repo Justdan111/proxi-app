@@ -1,80 +1,87 @@
 # Proxi Launch Readiness Audit
 
-Date: 21 August 2026
-Project: Proxi (Expo SDK 54 / React Native 0.81 / expo-router v6)
+Date: **30 August 2026** (re-audit)
+Project: Proxi (Expo SDK 57 / React Native 0.86.3 / expo-router v57)
 Scope: Production readiness for Apple App Store and Google Play Store
 
-This report supersedes the previous audit dated 23 April 2026. It is based on a
-full read of all 37 source files, a TypeScript check, and verification of every
-claim against the code.
+This is a re-audit of the codebase after the four-day launch plan was executed and
+merged. It supersedes the 21 August 2026 report, which described Expo SDK 54 and a very
+different codebase.
 
-Companion document: [LAUNCH_PLAN.md](LAUNCH_PLAN.md) — the prioritised fix plan
-and day-by-day schedule.
+**Sections 2–12 are retained as the diagnostic record of that first audit.** Almost every
+defect they describe is now fixed — §12 records what each day resolved, and
+[LAUNCH_PLAN.md](LAUNCH_PLAN.md) cites those section numbers, so they are deliberately not
+renumbered. **§13 holds the findings of this re-audit** — defects present in the code as it
+stands today.
 
 ## 1. Executive Summary
 
-Current decision: **NO-GO**
+Current decision: **NO-GO — but for the first time, not because of the code.**
 
-The architecture is sound. Layering, optimistic state updates with rollback,
-API error mapping, and the background-task design are all above-average work.
-What is broken is concentrated at the **seams between modules** — four separate
-places where two correct-looking components disagree about a shared contract.
+Every P0 and P1 defect from the August audit is fixed and merged. The app now targets
+Android API 36, runs on SDK 57, renders maps through `react-native-maps`, delivers
+notifications on a MAX-importance channel that is actually referenced, notifies once per
+geofence visit instead of once per minute, and ships an in-app account-deletion flow.
+`tsc --noEmit` is clean and `expo-doctor` reports 21/21.
 
-Blockers fall into three groups:
+What stands between this and a submission is now almost entirely outside the repository:
 
-1. **Functional defects** that make the core promise of the app fail — most
-   critically, notification spam, `once` reminders that never complete, and an
-   alarm notification channel that has never once been applied (§3.9).
-2. **Store compliance gaps** — missing account deletion (a near-certain Apple
-   rejection), missing `android.package`, a missing asset, an entitlement the app
-   is not approved for, and an **Android target API level below Play's minimum
-   from 31 August 2026** (§4.8).
-3. **Account enrollment** — neither the Apple Developer Program nor Google Play
-   Console account exists yet. This is the longest lead time in the project and
-   is not something code can shorten.
+1. **A backend endpoint that does not exist.** `DELETE /api/auth/me` is required by Apple
+   guideline 5.1.1(v). The client is complete and returns 404. iOS cannot be submitted.
+2. **Two store accounts that have not been created**, and **12 Play testers who have not
+   been recruited** — a 14-day continuous closed test that no amount of engineering
+   shortens.
+3. **A verification gap.** Nothing has ever been run on a physical device. Background
+   geofencing and notification delivery are not testable in a simulator, so the central
+   claims of this report — that the alarm channel now applies, that a geofence notifies
+   once — are *implemented and unverified*. `release/DEVICE_QA.md` is the pass that closes
+   this, and it has not been run.
 
-Two findings deserve particular attention because they invert expectations:
+This re-audit found **six defects** in the merged code (§13). None is a launch blocker, but
+two are worth fixing before testers see a build:
 
-- **The alarm behaviour is already built and simply never switched on.** The
-  `proxi-alarm` channel is correctly configured with MAX importance, DND bypass,
-  a custom sound, and a vibration pattern — but `channelId` is never passed, so
-  every notification has always used Android's default channel. One missing
-  property accounts for most of the gap between current behaviour and the intended
-  alarm experience (§3.9).
-- **The Expo upgrade is a release blocker, not maintenance.** SDK 54 targets
-  Android API 35; Play requires API 36 for new apps from 31 August 2026, and this
-  app's Play timeline lands well past that date (§4.8).
+- **Granting location permission outside the app never starts geofencing** (§13.1). Moving
+  the permission prompt to first-save — correct for Apple guideline 5.1.5 — left the
+  permission checked exactly once per launch. A user who declines, then enables "Always" in
+  system settings, gets no geofencing until they restart the app. The core feature is
+  silently dead for exactly the user who just went out of their way to enable it.
+- **The Activity tab never refreshes** (§13.3). This is a latent defect that only became
+  visible because an adjacent fix started working: background activity logging had never
+  once executed, so nothing was arriving to be stale. Now that it does, the tab shows
+  data frozen at mount until pulled to refresh.
+
+Both illustrate the same thing, and it is the reason the device pass matters more than
+another reading of the code: **fixing one defect can expose another that was previously
+unreachable.**
 
 ### Timeline reality
 
-| Milestone | Blocking factor | Realistic date |
+| Milestone | Blocking factor | Status |
 |---|---|---|
-| Code complete | Engineering only — now includes the SDK 57 upgrade (§5.7) | Day 4 |
-| Apple enrollment usable | 24–48h after applying, not compressible | Day 4–5 |
-| iOS submitted for review | Requires active Apple account | Day 4–5 |
-| Play closed testing starts | Requires verified Play account | Day 4–5 |
-| Play production access | **12 testers × 14 continuous days** of closed testing | ~Day 18+ |
+| Code complete | Engineering | **Done** — days 1–4 merged |
+| Device QA | A physical device; not compressible | **Not started** |
+| Account deletion working | Backend `DELETE /api/auth/me` | **Blocked** — endpoint does not exist |
+| Apple enrollment usable | 24–48h after applying | **Not started** |
+| iOS submitted | Active Apple account **and** the delete endpoint | Blocked on both |
+| Play closed testing starts | Verified Play account + a build + 12 testers | **Not started** |
+| Play production access | **12 testers × 14 continuous days** | ~3 weeks after the test goes live |
 
-Enrollment has been scheduled for day 3 at the project owner's direction. The
-consequence is recorded here for accuracy: day 3 ends with *code complete and
-enrollment submitted*, not with an App Store submission. Google Play production
-is approximately three weeks out regardless of engineering, because new personal
-developer accounts must complete a 12-tester, 14-day closed test before they can
-apply for production access.
-
-Enroll with Apple as an **individual**, not an organization. Organization
-enrollment requires a D-U-N-S number, which adds 1–2 weeks.
+The Play date is set by the tester clock, not by engineering, and that clock has still not
+started. Enroll with Apple as an **individual** — organization enrollment requires a
+D-U-N-S number and adds 1–2 weeks.
 
 ## Remaining Work
 
-Status as of **30 August 2026**, after days 1–4 and the review-fix branch.
+Status as of **30 August 2026**, after days 1–4, the review-fix branch, and the re-audit
+in §13.
 
-**No in-scope code is outstanding.** Every defect in §3, §6, §7, §8 and §9 that was in
-scope for launch is fixed. What is left is one asset and a set of things this repository
-cannot do: a backend endpoint, two store accounts, a device, and three console forms.
+Every defect in §3, §6, §7, §8 and §9 that was in scope for launch is fixed. The re-audit
+found **six further defects** in the merged code (§13) — none blocking, two worth fixing
+before testers get a build. Everything else that remains is outside this repository: a
+backend endpoint, two store accounts, a device, and three console forms.
 
 Numbered references point at the sections below, which hold the full diagnosis. §12 records
-what each day resolved.
+what each day resolved; §13 is this re-audit.
 
 ### Blocked on someone else — this is the critical path
 
@@ -84,6 +91,21 @@ what each day resolved.
 | **3.3** | Unconfirmed: does `PUT /api/reminders/:id` accept `triggered`? | If it does not, `once` reminders still auto-disable through the `toggle` fallback, but the Completed badge never appears. Verified by device check 2.4c: reinstall, sign in, and see whether completion survived |
 | **11.9** | Neither store account is enrolled | Enrol with Apple as an **individual** — organization enrolment needs a D-U-N-S number and adds one to two weeks |
 | — | **12 Google Play testers are not recruited** | 12 testers × 14 **continuous** days of closed testing before a new personal account gets production access. Pure wall-clock, not work. The clock has not started, and this single item sets the Play date regardless of engineering. Aim for 15 — dropping below 12 restarts it |
+
+### Code — from the 30 August re-audit (§13)
+
+Small, and all in this repository. Sequenced by what a tester would hit first.
+
+| § | Item | Priority |
+|---|---|---|
+| **13.1** | Granting location permission outside the app never starts geofencing until a restart — re-check on foreground | **P1** |
+| **13.3** | The Activity tab never refreshes; reload on focus | **P1** |
+| **13.2** | Geofencing runs a foreground service and samples location with zero enabled reminders | P2 |
+| **13.4** | The place-search debounce is never cancelled, and `useCallback` re-allocates it every render | P2 |
+| **13.5** | Four `console.log` calls ship, three still tagged `[v0]`, on swallowed error paths | P2 |
+
+§13.6 records which lint errors are real and which are a rule firing on a correct pattern —
+read it before "fixing" any of them.
 
 ### Needs an asset
 
@@ -836,3 +858,142 @@ No credential leaks found.
   errors confined to `app.config.ts` and the archived `lib/simulation/` directory (§2.4).
   Both causes are fixed as of 30 August 2026; `tsc --noEmit` now reports none.
 
+
+---
+
+## 13. Re-audit Findings — 30 August 2026
+
+Defects present in the merged code. Verified against source, with `file:line` references.
+None blocks submission; §13.1 and §13.3 should be fixed before testers get a build.
+
+Two of these were **created or exposed by the launch-plan work itself**, which is noted
+where it applies — that is the more useful signal than the defect alone.
+
+### 13.1 Granting location permission outside the app never starts geofencing — P1
+
+[app/_layout.tsx:115–123](app/_layout.tsx#L115)
+
+`AppInitializer` checks permissions and starts geofencing inside an effect keyed on
+`[isAuthenticated]`. That runs once per launch. Day 3 deliberately removed the startup
+permission *prompt* (§4.7, Apple guideline 5.1.5) so that startup only **checks** — but the
+check inherited the same once-per-launch lifetime.
+
+Consequence: a user who declines at the first-save prompt, then later enables "Always" in
+system settings, gets **no geofencing at all** until they restart the app or sign out and
+back in. No reminder fires, and nothing in the UI indicates why. This is the worst possible
+audience for a silent failure — the user who just went and enabled the permission on
+purpose.
+
+The pattern to copy is thirty lines above it: [app/_layout.tsx:96](app/_layout.tsx#L96)
+already re-runs on `AppState` `active` to refresh reminders. The permission check needs the
+same treatment — re-check on foreground, and start geofencing if it has since been granted.
+
+*Introduced by the day-3 change that moved permission prompts to first use.*
+
+### 13.2 Geofencing runs even with nothing to watch — P2
+
+[lib/location/geofencing.ts:259](lib/location/geofencing.ts#L259),
+[app/_layout.tsx:115](app/_layout.tsx#L115)
+
+`startGeofencing()` is called whenever background permission is granted, regardless of
+whether any enabled reminders exist. On Android that means a continuous foreground service,
+a persistent **"Proxi is active — Watching for nearby reminders"** notification
+([geofencing.ts:272](lib/location/geofencing.ts#L272)), and location sampling every 50m or
+60s — for a user with no reminders, or who has disabled all of them.
+
+That is battery drain and a permanent notification in exchange for nothing, and it is the
+kind of thing reviewers and users both notice. Gate `startGeofencing` on there being at
+least one enabled reminder, and stop it when the last one is disabled or deleted.
+
+### 13.3 The Activity tab never refreshes — P1
+
+[app/(tab)/activity.tsx:107–111](app/(tab)/activity.tsx#L107)
+
+`load()` runs in a mount effect and nowhere else. No screen in the app uses
+`useFocusEffect` or `useIsFocused`, and expo-router keeps tab screens mounted — so
+navigating to Activity after a reminder fires shows data frozen at first mount until the
+user thinks to pull-to-refresh.
+
+**This defect is not new, but it was invisible until now.** Background activity logging had
+never once executed — it read the JWT from AsyncStorage while the token lives in SecureStore
+(§3.2) — so the feed had nothing arriving in the background to be stale about. Fixing §3.2
+turned a dormant bug into a visible one.
+
+Home already re-fetches on foreground ([app/_layout.tsx:96](app/_layout.tsx#L96)); Activity
+should reload on focus for the same reason.
+
+### 13.4 The place-search debounce is never cancelled — P2
+
+[app/location-picker.tsx:61–74](app/location-picker.tsx#L61)
+
+```ts
+const searchPlaces = useCallback(debounce(async (text) => { ... }, 400), []);
+```
+
+Two problems in one line:
+
+1. **No cleanup.** Nothing calls `.cancel()` on unmount, so a keystroke followed by closing
+   the picker within 400ms leaves a pending geocode that resolves into `setResults` and
+   `setSearching` on an unmounted component.
+2. **`debounce(...)` is not an inline function**, so it is evaluated on *every* render,
+   allocating a fresh debounced function that `useCallback` then discards. This is what the
+   remaining lint error at `location-picker.tsx:62` is reporting.
+
+Fix both by creating the debounced function in a `useEffect`/`useRef` and cancelling it in
+the cleanup.
+
+### 13.5 Scaffold debug logging ships to production — P2
+
+Four `console.log` calls survive in shipping code, three still carrying the `[v0]` prefix of
+the tool that scaffolded the screens:
+
+| File | Line |
+|---|---|
+| [app/(tab)/settings.tsx](app/(tab)/settings.tsx#L156) | 156 — `[v0] Logout error` |
+| [components/signUpScreen.tsx](components/signUpScreen.tsx#L98) | 98 — `[v0] Signup error` |
+| [components/loginScreen.tsx](components/loginScreen.tsx#L106) | 106 — `[v0] Login error` |
+| [app/_layout.tsx](app/_layout.tsx#L163) | 163 — `SplashScreen error` |
+
+These are swallowed error paths, so they also hide real failures behind a log line no user
+or crash reporter will see. The `console.warn`/`console.error` calls in `themeContext.tsx`
+and `geofencing.ts` are deliberate and should stay.
+
+### 13.6 Lint state — 4 errors, 4 warnings
+
+Not all of these are defects, and the distinction matters so nobody "fixes" the wrong ones.
+
+**Accepted — a rule firing on a pattern that is correct here.** Three of the four errors are
+`Calling setState synchronously within an effect`, raised on Reanimated shared-value writes
+(`headerOpacity.value = withTiming(...)`) in `activity.tsx:110`, `home.tsx:254` and on the
+draft-consuming effect in `add-reminder.tsx:64`. `reactCompiler: true` is enabled in
+`app.json`, and this is the documented way to drive Reanimated entrance animations. Leave
+them.
+
+**Real — see §13.4.** `location-picker.tsx:62`, the non-inline `useCallback`.
+
+**Warnings** are all `exhaustive-deps` on Reanimated shared values, which are stable
+references by design. Harmless.
+
+### Not defects — verified good
+
+Re-checked and found correct, so no one re-opens them:
+
+- `.env` is gitignored and untracked. The Android Maps key is read as
+  `GOOGLE_MAPS_ANDROID_API_KEY` — deliberately **not** `EXPO_PUBLIC_*`, so it is not
+  embedded in the JS bundle. It still must be restricted in Google Cloud Console (§10).
+- The JWT lives in `expo-secure-store`, and the background task now reaches it through the
+  shared API client rather than a second, wrong storage read.
+- `getApiError` ([lib/api/errors.ts](lib/api/errors.ts)) maps network, timeout and every
+  relevant HTTP status to human copy, with a safe fallback.
+- No app-level iOS privacy manifest is required: AsyncStorage and expo-file-system ship
+  their own `PrivacyInfo.xcprivacy`, and the app uses no required-reason API directly.
+- 4,604 lines across `app/`, `components/`, `context/` and `lib/`, excluding the archived
+  `lib/simulation/`. The four-day plan removed more code than it added.
+
+### Still true, and still the largest risk
+
+**There is no test suite, and there is no device verification.** Neither `tsc` nor lint can
+reach any of §13.1 through §13.4 — three of the four were found by reading, and the
+concurrency race fixed on `fix/geofence-concurrency` needed two background tasks in view at
+once to see at all. Until `release/DEVICE_QA.md` has been run on hardware, every behavioural
+claim in this document is *implemented and unverified*.
