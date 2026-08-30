@@ -104,7 +104,9 @@ then be its own PR after launch.
 
 ### 1.2 Map migration
 
-- Remove `@rnmapbox/maps`; add `react-native-maps` (1.29.0, peer `react-native >= 0.76.0`).
+- Remove `@rnmapbox/maps`; add `react-native-maps`. **Landed at 1.27.2, not 1.29.0** —
+  `expo install` pins the version in SDK 57's bundled-native-modules manifest, and 1.29.0
+  fails `expo-doctor`.
 - Rewrite `components/maps/ReminderMap.tsx`. **The prop interface stays identical**
   (`center`, `radius`, `onLocationSelect`, `height`), so neither caller changes:
 
@@ -154,7 +156,12 @@ Mapbox `fetch` calls in `app/location-picker.tsx` (lines 997, 1016, 1047).
   policy liability with no corresponding feature).
 - `app.config.ts`: delete the `MAPBOX_DOWNLOADS_TOKEN` plugin manipulation; add the
   `react-native-maps` plugin; fix the `ExpoConfig.name` type error.
-- `.env`: drop `EXPO_PUBLIC_MAPBOX_TOKEN`; add the Android Google Maps key.
+  **Note:** the Android key must be passed as the plugin's own `androidGoogleMapsApiKey`
+  prop. Setting `android.config.googleMaps.apiKey` does not work — the plugin removes the
+  `geo.API_KEY` meta-data whenever its prop is absent. Leave `iosGoogleMapsApiKey` unset
+  to keep iOS on Apple Maps and the GoogleMaps pod out of the build.
+- `.env`: drop `EXPO_PUBLIC_MAPBOX_TOKEN`; add the Android Google Maps key as
+  `GOOGLE_MAPS_ANDROID_API_KEY` — **not** `EXPO_PUBLIC_*`, which embeds it in the bundle.
 - Exclude `lib/simulation/` from `tsconfig.json` (clears 7 of 8 type errors).
 - **Confirm the built artifact targets API 36** — this is the whole point of §1.1.
 

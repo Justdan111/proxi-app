@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "proxi",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -16,11 +15,8 @@
         "NSLocationWhenInUseUsageDescription": "Proxi uses your location to show nearby reminders.",
         "UIBackgroundModes": [
           "location",
-          "fetch",
-          "location",
           "fetch"
         ],
-        "UNAuthorizationOptionCriticalAlert": true,
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.danemmanuel.proxi"
@@ -32,7 +28,6 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "ACCESS_FINE_LOCATION",
@@ -40,11 +35,12 @@
         "ACCESS_BACKGROUND_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
-        "USE_FULL_SCREEN_INTENT",
+        "SCHEDULE_EXACT_ALARM",
         "WAKE_LOCK",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION"
-      ]
+      ],
+      "package": "com.danemmanuel.proxi"
     },
     "web": {
       "output": "static",
@@ -65,6 +61,20 @@
         }
       ],
       "expo-secure-store",
+      "expo-font",
+      "expo-image",
+      "expo-web-browser",
+      "expo-status-bar",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36,
+            "buildToolsVersion": "36.0.0"
+          }
+        }
+      ],
       [
         "expo-location",
         {
@@ -81,12 +91,10 @@
           "icon": "./assets/notification-icon.png",
           "color": "#6366f1",
           "sounds": [
-            "./assets/sounds/proxi-alert.wav"
-          ]
+            "./assets/sounds/proxi_alert.wav"
+          ],
+          "defaultChannel": "proxi-alarm"
         }
-      ],
-      [
-        "@rnmapbox/maps"
       ]
     ],
     "experiments": {

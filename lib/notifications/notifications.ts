@@ -22,7 +22,7 @@ export async function setupNotificationChannel() {
     name:                     'Proxi Location Alerts',
     description:              'Alarm-style alerts when you arrive at a saved location',
     importance:               Notifications.AndroidImportance.MAX,
-    sound:                    'proxi-alert.wav',     // filename only, no path
+    sound:                    'proxi_alert.wav',     // filename only, no path
     vibrationPattern:         [0, 500, 200, 500],   // wait, buzz, pause, buzz
     lightColor:               '#6366f1',
     lockscreenVisibility:     Notifications.AndroidNotificationVisibility.PUBLIC,
@@ -63,7 +63,7 @@ export async function sendReminderNotification(data: ReminderNotificationData) {
   const notificationContent: Notifications.NotificationContentInput = {
     title:    `${data.icon}  You're nearby!`,
     body:     `Don't forget: ${data.reminderTitle} · ${data.location}`,
-    sound:    'proxi-alert.wav',
+    sound:    'proxi_alert.wav',
     priority: Notifications.AndroidNotificationPriority.MAX,
     data: {
       reminderId: data.reminderId,
@@ -98,7 +98,7 @@ export async function sendFullScreenReminderNotification(data: ReminderNotificat
     content: {
       title:    `${data.icon}  You're nearby!`,
       body:     `Don't forget: ${data.reminderTitle}`,
-      sound:    'proxi-alert.wav',
+      sound:    'proxi_alert.wav',
       priority: Notifications.AndroidNotificationPriority.MAX,
       data: {
         reminderId: data.reminderId,
@@ -140,7 +140,7 @@ export async function snoozeReminder(data: ReminderNotificationData, minutes = 1
     content: {
       title: `${data.icon}  Snoozed Reminder`,
       body:  `Don't forget: ${data.reminderTitle}`,
-      sound: 'proxi-alert.wav',
+      sound: 'proxi_alert.wav',
       data:  { reminderId: data.reminderId },
     },
     trigger: {

@@ -11,7 +11,6 @@ import { ThemeProvider } from '@/context/themeContext';
 import { AuthProvider, useAuth } from '@/context/authContext';
 import { ReminderProvider, useReminders } from '@/context/reminderContext';
 import SplashScreen from '@/components/splashScreen';
-import Mapbox from '@rnmapbox/maps';
 import {
   setupNotificationChannel,
   registerNotificationCategories,
@@ -99,8 +98,6 @@ function RootNavigator() {
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }
-
-Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_TOKEN!);
 
 
 export default function RootLayout() {
