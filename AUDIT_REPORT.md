@@ -87,10 +87,48 @@ what each day resolved; §13 is this re-audit.
 
 | § | Item | Why it blocks |
 |---|---|---|
-| **4.1** | `DELETE /api/auth/me` does not exist on the backend | **iOS cannot be submitted.** Apple 5.1.1(v). The client is complete — the Settings row, the confirmation and the teardown all work — and 404s until the endpoint ships |
-| **3.3** | Unconfirmed: does `PUT /api/reminders/:id` accept `triggered`? | If it does not, `once` reminders still auto-disable through the `toggle` fallback, but the Completed badge never appears. Verified by device check 2.4c: reinstall, sign in, and see whether completion survived |
+| **4.1** | `DELETE /api/auth/me` does not exist on the backend | **iOS cannot be submitted.** Apple 5.1.1(v). The client is complete — the Settings row, the confirmation and the teardown all work — and 404s until the endpoint ships. See the note below: this may be smaller than "blocked on the backend" suggests |
 | **11.9** | Neither store account is enrolled | Enrol with Apple as an **individual** — organization enrolment needs a D-U-N-S number and adds one to two weeks |
 | — | **12 Google Play testers are not recruited** | 12 testers × 14 **continuous** days of closed testing before a new personal account gets production access. Pure wall-clock, not work. The clock has not started, and this single item sets the Play date regardless of engineering. Aim for 15 — dropping below 12 restarts it |
+
+#### §4.1 is one route, and it may block both stores
+
+Two things this row has been understating.
+
+**It is probably not a cross-team dependency.** The API is the project's own Railway
+service. If the person writing it is the same person reading this, "blocked on the backend"
+means one route handler: authenticate from the same JWT, hard-delete the user together with
+their reminders and activity, invalidate the token, return `204`. Not a quarter's work — and
+it is the single thing standing between a finished app and an iOS submission.
+
+**It may not be Apple-only.** This report scopes account deletion to Apple 5.1.1(v), but
+Google Play also requires account deletion for apps that allow account creation, in-app and
+via a web URL, declared in the Data Safety form. **Confirm this in Play Console before
+scoping the work** — if it applies, the same endpoint blocks both stores rather than one,
+which changes its priority relative to everything else on this page.
+
+There is no client-side substitute for either store. Clearing local storage is not deletion:
+the account still exists and signing in restores it, which is precisely the pattern Apple
+rejects. Directing users to email support does not satisfy the in-app requirement.
+
+### Open questions — answerable here, without waiting on anyone
+
+These are **unknowns, not missing work.** They were previously filed alongside the genuine
+external blockers, which made them look like they were waiting on somebody. They are not.
+
+| § | Question | How to settle it |
+|---|---|---|
+| **3.3** | Does `PUT /api/reminders/:id` accept `triggered`? | The endpoint already exists; only field acceptance is in doubt. Log in against the API, `PUT {"triggered": true}` to a reminder, and read the response back. If it returns `triggered: true` the question closes; if it echoes `false` or drops the field, the server ignores it |
+
+**Neither outcome blocks launch.** If the field is ignored, `once` reminders still
+auto-disable through the `toggle` fallback and the only loss is the green "Completed" badge.
+Should it come to that, the badge could instead be rendered from the local
+`proxi_triggered_cache` the geofence task already writes — correct day to day, lost on
+reinstall. That is deliberately **not** built yet: it is speculative complexity until the
+question above has an answer.
+
+Device check 2.4c reaches the same conclusion from the other direction — reinstall, sign in,
+and see whether completion survived — but does not require a device to answer.
 
 ### Code — from the 30 August re-audit (§13)
 
