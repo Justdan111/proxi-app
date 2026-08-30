@@ -9,6 +9,53 @@ blockers, and intent — the things that are not recoverable from the diff.
 
 ---
 
+## 2026-08-30 — Self-review of the stack: three geofencing defects
+
+**Branch:** `fix/geofence-concurrency` → PR #6 (open, awaiting review)
+
+### Why this exists
+All four days were complete with nothing left to build, and this repo has no test suite —
+so typecheck and lint had passed on ~2,000 lines of logic that no one had read back.
+Reviewing day 2's own work found three defects, all in the geofencing path that day 2
+existed to fix.
+
+### Found and fixed
+1. **Concurrent runs could double-notify.** The two background tasks share a JS context and
+   can overlap. `checkProximity` read fence state, then awaited notification delivery plus
+   up to three network calls (completion PUT, toggle fallback, activity POST — 10s timeout
+   each) before writing it back. A second run entering that window saw "not yet notified"
+   and sent again. This defeated the exact guarantee §2.1 was written to provide, and it
+   would have shown up on a device as intermittent duplicates — the hardest kind to
+   attribute. Now serialised through a promise chain, with the notified mark persisted
+   before the network calls.
+2. **Fence state was never pruned.** Only enabled reminders are cached and only cached ones
+   are visited, so ids for deleted or disabled reminders were never removed. Unbounded
+   growth, and a real symptom: toggle a reminder off and on while inside its radius and it
+   stayed silent until you left and came back.
+3. **No per-reminder error isolation.** One throw aborted the pass and discarded occupancy
+   changes already computed for earlier reminders.
+
+Also renamed `useDistanceToReminder` → `distanceToReminder`; it stopped being a hook in
+day 3 and the prefix was a trap.
+
+`tsc` clean, lint unchanged at 8 problems.
+
+### Where this leaves the stack
+Five PRs, stacked: **#2 → #3 → #4 → #5 → #6.** Each based on the one before.
+
+### Note for whoever reviews
+Defect 1 is not reachable by reading `checkProximity` alone — it only appears when you
+notice both `TaskManager.defineTask` bodies call it and that there are awaited network
+calls between the read and the write. Worth the same scrutiny on any future background
+work.
+
+### Next action
+Unchanged and entirely external: 12 Play testers (the 14-day clock still has not started),
+`DELETE /api/auth/me`, and both store enrollments. Then `release/DEVICE_QA.md` on real
+hardware — also published as a tickable page for use in the field.
+
+---
+
 ## 2026-08-30 — Day 4: release compliance package
 
 **Branch:** `day4/release-prep` → PR #5 (open, awaiting review)

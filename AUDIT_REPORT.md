@@ -596,6 +596,22 @@ No credential leaks found.
 
 ## 12. Change Log Since 23 April 2026 Audit
 
+**Found reviewing day 2's own work, fixed on `fix/geofence-concurrency` (30 August 2026):**
+- **§3.1's fix had a race.** `GEOFENCE_TASK` and `BG_FETCH_TASK` share one JS context and
+  can overlap. A check read the fence state, then awaited notification delivery plus up to
+  three network calls before writing it back — so a second run could observe "not yet
+  notified" and send a duplicate. Checks are now serialised; the notified mark is persisted
+  before the network calls rather than after.
+- **Fence state was never pruned.** `cacheRemindersForBackground` caches only enabled
+  reminders and the loop visits only cached ones, so ids for deleted or disabled reminders
+  were never removed. Unbounded growth, plus a visible symptom: toggling a reminder off and
+  on while inside its radius left it in the notified set and it stayed silent until the
+  user left and returned.
+- **No per-reminder error isolation.** A throw inside the loop skipped every remaining
+  reminder and discarded occupancy changes already computed.
+- `useDistanceToReminder` renamed — it stopped being a hook when §9.1's per-card GPS
+  fallback was removed, and the `use*` prefix on a function with an early return is a trap.
+
 **Corrected on `day4/release-prep` (30 August 2026):**
 - **§4.6's framing was wrong.** It called for disclosing "precise background location
   collection, server-side storage, and retention". Tracing every outbound call shows the
