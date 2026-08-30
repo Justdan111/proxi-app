@@ -1,12 +1,11 @@
 import LogInScreen from '@/components/loginScreen';
-import { useRouter, Href } from 'expo-router';
-
+import { useRouter } from 'expo-router';
 
 export default function LoginRoute() {
   const router = useRouter();
 
-  const handleNavigate = (screen: 'welcome' | 'signup' | 'forgot-password') => {
-    router.push((screen === 'welcome' ? '/(auth)/index' : `/(auth)/${screen}`) as Href);
+  const handleNavigate = (screen: 'signup' | 'forgot-password') => {
+    router.push(`/(auth)/${screen}`);
   };
 
   return <LogInScreen onNavigate={handleNavigate} />;
