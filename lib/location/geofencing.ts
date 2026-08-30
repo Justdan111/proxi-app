@@ -6,6 +6,7 @@ import { sendReminderNotification } from '../notifications/notifications';
 import { getDistanceMetres, Coordinates } from './distance';
 import { Reminder, remindersApi } from '../api/reminders.api';
 import { activitiesApi } from '../api/activities.api';
+import { ACCENT } from '../theme';
 
 export const GEOFENCE_TASK   = 'PROXI_GEOFENCE_TASK';
 export const BG_FETCH_TASK   = 'PROXI_BG_FETCH_TASK';
@@ -230,7 +231,7 @@ export async function startGeofencing() {
       foregroundService: {              // Android foreground service
         notificationTitle:   'Proxi is active',
         notificationBody:    'Watching for nearby reminders',
-        notificationColor:   '#6366f1',
+        notificationColor:   ACCENT,
       },
     });
   }

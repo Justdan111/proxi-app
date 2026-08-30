@@ -11,7 +11,7 @@ import { Eye, EyeOff, ArrowRight, MapPin } from 'lucide-react-native';
 import { useAuth } from '@/context/authContext';
 
 type SignUpScreenProps = {
-  onNavigate: (screen: 'welcome' | 'login') => void;
+  onNavigate: (screen: 'login') => void;
 };
 
 export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {

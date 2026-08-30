@@ -55,8 +55,8 @@ theme: {
           },
         },
         accent: {
-          DEFAULT: '#00d4d4',
-          dark: '#00d4d4',
+          DEFAULT: '#00D4AA',
+          dark: '#00D4AA',
           foreground: {
             DEFAULT: '#1a1a1a',
             dark: '#000000',
@@ -79,8 +79,8 @@ theme: {
           dark: '#2a2a2a',
         },
         ring: {
-          DEFAULT: '#00d4d4',
-          dark: '#00d4d4',
+          DEFAULT: '#00D4AA',
+          dark: '#00D4AA',
         },
         chart: {
           1: { DEFAULT: '#3b82f6', dark: '#60a5fa' },

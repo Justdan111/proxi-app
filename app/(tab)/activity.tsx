@@ -6,6 +6,7 @@ import Animated, { Easing, FadeInDown, useAnimatedStyle, useSharedValue, withSpr
 import { AlertCircle, Bell, MapPin, RefreshCcw, Trash2 } from 'lucide-react-native';
 import { activitiesApi, Activity } from '@/lib/api';
 import { getApiError } from '@/lib/api/errors';
+import { ACCENT } from '@/lib/theme';
 
 type ActivityGroup = {
   key: string;
@@ -196,7 +197,7 @@ export default function ActivityScreen() {
         className="flex-1"
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor="#00D4AA" />
+          <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={ACCENT} />
         }
         contentContainerStyle={{ flexGrow: 1 }}
       >
@@ -233,7 +234,7 @@ export default function ActivityScreen() {
           ) : groupedActivities.length === 0 ? (
             <View className="flex-1 items-center justify-center pt-16">
               <View className="bg-card dark:bg-card-dark rounded-3xl p-8 border border-border dark:border-border-dark w-full items-center">
-                <Bell size={40} color="#00D4AA" />
+                <Bell size={40} color={ACCENT} />
                 <Text className="text-foreground dark:text-foreground-dark font-bold text-lg mt-4 mb-2 text-center">
                   No activity yet
                 </Text>

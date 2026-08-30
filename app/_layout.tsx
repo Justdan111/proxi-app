@@ -10,6 +10,7 @@ import { AppState, StatusBar } from 'react-native';
 import { ThemeProvider } from '@/context/themeContext';
 import { AuthProvider, useAuth } from '@/context/authContext';
 import { ReminderProvider, useReminders } from '@/context/reminderContext';
+import { LocationDraftProvider } from '@/context/locationDraftContext';
 import SplashScreen from '@/components/splashScreen';
 import {
   setupNotificationChannel,
@@ -18,7 +19,7 @@ import {
   snoozeReminder,
 } from '@/lib/notifications/notifications';
 import { startGeofencing, stopGeofencing, cacheRemindersForBackground } from '@/lib/location/geofencing';
-import { requestAllPermissions } from '@/lib/location/permissions';
+import { checkPermissions } from '@/lib/location/permissions';
 import { haptics } from '@/lib/haptics';
 
 
@@ -107,8 +108,12 @@ function AppInitializer() {
       return;
     }
 
+    // Only check here — never prompt. Asking for Always location before the
+    // user has created a reminder gives them no context to say yes to, which
+    // is what Apple guideline 5.1.5 objects to. The prompt happens when the
+    // first reminder is saved, where the reason is self-evident.
     const initGeofencing = async () => {
-      const perms = await requestAllPermissions();
+      const perms = await checkPermissions();
       if (perms.backgroundLocation) {
         await startGeofencing();
       }
@@ -152,7 +157,6 @@ export default function RootLayout() {
   useEffect(() => {
     async function prepare() {
       try {
-        await new Promise(resolve => setTimeout(resolve, 2000));
         await ExpoSplashScreen.hideAsync();
         setAppReady(true);
       } catch (error) {
@@ -171,9 +175,11 @@ export default function RootLayout() {
       <ThemeProvider>
         <AuthProvider>
           <ReminderProvider>
-            <AppInitializer />
-            <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
-            <RootNavigator />
+            <LocationDraftProvider>
+              <AppInitializer />
+              <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
+              <RootNavigator />
+            </LocationDraftProvider>
           </ReminderProvider>
         </AuthProvider>
       </ThemeProvider>

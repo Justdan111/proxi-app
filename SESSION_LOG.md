@@ -9,6 +9,56 @@ blockers, and intent — the things that are not recoverable from the diff.
 
 ---
 
+## 2026-08-30 — Day 3: screen consolidation, compliance, UI consistency
+
+**Branch:** `day3/screen-consolidation-and-compliance` → PR #4 (open, awaiting review)
+
+### Stacking, again
+Stacked on `day2/...`, for the same reason day 2 stacked on day 1: neither has merged, so
+`main` still has none of this. **Merge order is #2, #3, #4.** Each PR is based on the one
+before it, so each diff shows only its own day.
+
+### Completed
+All of §3.1–§3.7 except the part that needs the backend.
+- §3.1 Explorer merged into Home; three tabs; the FAB margin hack removed.
+- §3.2 dead welcome screen and its invalid route deleted; `as Href` casts gone.
+- §3.3 account deletion — client complete, **endpoint still missing**.
+- §3.4 401 handling, §3.5 location draft context, §3.6 UI consistency, §3.7 performance
+  and contextual permission prompts.
+- `tsc --noEmit` clean, `expo-doctor` 21/21, lint down from 16 problems to 8
+  (4 errors, 4 warnings) — all 8 pre-existing patterns, none introduced.
+- Net −265 lines across 26 files.
+
+### Decisions made
+| Decision | Chosen | Why |
+|---|---|---|
+| Accent colour | **#00D4AA** | It had the most existing uses (18 vs 9 vs 7), so unifying on it changed the fewest call sites. #00d4d4 was the Tailwind token, so classes and literals had been rendering different colours all along. |
+| Where the accent lives | Tailwind token **and** `lib/theme.ts` | RN props like `color=` cannot take a class. Two sources is unavoidable; the file documents that they must move together. |
+| Icon picker added | Yes — small row on add-reminder | Not in the plan. §3.5 names "the dropped selectedIcon" as a defect, but nothing anywhere could ever set an icon, so carrying it through the draft alone would have changed nothing. |
+| Permission prompts | Moved to first reminder save | §4.7. Declining does not block the save. |
+| Account teardown | Shared between logout and deletion | They had drifted; deletion needs strictly more cleanup than logout did. `@proxi_theme` deliberately survives — a device preference, not account data. |
+
+### Blocked
+- **`DELETE /api/auth/me` still does not exist.** The client is finished: the Settings row,
+  the confirmation, and the teardown all work, and the call will 404 until the endpoint
+  ships. iOS cannot be submitted without it. Ten days since the plan said to escalate.
+- The `triggered` field question from day 2 is unchanged and unanswered.
+- §2.6 alarm sound unchanged.
+- Store enrollment and the 12 Play testers: unchanged. The 14-day clock has not started.
+
+### Not verified
+Still no physical-device QA, now across three days of changes. Day 3 adds visual work —
+one accent in both themes, the rebuilt location-picker, the merged Home — none of which
+has been seen rendered.
+
+### Next action
+**Review and merge #2, #3, #4 in order.** Run `npx expo prebuild --clean` first and work
+through the day 1–3 acceptance lists on a physical device. Day 4 is `day4/release-prep`:
+compliance package, device QA, production build, store enrollment. Day 4 cannot complete
+without the backend endpoint and both store accounts.
+
+---
+
 ## 2026-08-30 — Day 2: alarm channel, geofence correctness, haptics
 
 **Branch:** `day2/alarm-notifications-and-geofencing` → PR #3 (open, awaiting review)

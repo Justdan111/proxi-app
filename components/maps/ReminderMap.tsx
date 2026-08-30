@@ -2,6 +2,7 @@ import React from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import MapView, { Circle, MapPressEvent, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Coordinates } from '@/lib/location/distance';
+import { ACCENT, accentAlpha } from '@/lib/theme';
 
 interface Props {
   center:            Coordinates;
@@ -41,8 +42,8 @@ export default function ReminderMap({
         <Circle
           center={center}
           radius={radius}
-          fillColor="rgba(99, 102, 241, 0.15)"
-          strokeColor="rgba(99, 102, 241, 0.7)"
+          fillColor={accentAlpha(0.15)}
+          strokeColor={accentAlpha(0.7)}
           strokeWidth={2}
         />
       </MapView>
@@ -74,7 +75,7 @@ const styles = StyleSheet.create({
     width:           16,
     height:          16,
     borderRadius:    8,
-    backgroundColor: '#6366f1',
+    backgroundColor: ACCENT,
     borderWidth:     3,
     borderColor:     '#fff',
   },
