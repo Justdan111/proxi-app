@@ -11,6 +11,7 @@ import { useTheme } from '@/context/themeContext';
 import ReminderMap from '@/components/maps/ReminderMap';
 import { Coordinates } from '@/lib/location/distance';
 import { geocoder, PlaceResult } from '@/lib/location/geocoding';
+import { haptics } from '@/lib/haptics';
 
 export default function LocationPickerScreen() {
   const { isDark } = useTheme();
@@ -101,6 +102,7 @@ export default function LocationPickerScreen() {
 
   const confirmSelection = () => {
     if (!selected) return;
+    haptics.select();
     router.back();
     // ✅ Matches exactly what add-reminder.tsx reads
     router.setParams({

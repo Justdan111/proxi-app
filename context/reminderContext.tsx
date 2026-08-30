@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { remindersApi, activitiesApi, Reminder, CreateReminderPayload, UpdateReminderPayload } from '@/lib/api';
 import { getApiError } from '@/lib/api/errors';
 import { useAuth } from './authContext';
+import { haptics } from '@/lib/haptics';
 
 interface ReminderContextType {
   reminders: Reminder[];
@@ -57,8 +58,10 @@ export function ReminderProvider({ children }: { children: React.ReactNode }) {
         eventType:     'created',
       });
 
+      haptics.success();
       return created;
     } catch (err) {
+      haptics.error();
       setError(getApiError(err));
       return null;
     }
@@ -77,6 +80,7 @@ export function ReminderProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleReminder = async (id: string) => {
+    haptics.toggle();
     // Optimistic update — flip locally before API responds
     setReminders(prev =>
       prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r)
@@ -95,6 +99,7 @@ export function ReminderProvider({ children }: { children: React.ReactNode }) {
       });
     } catch (err) {
       // Revert optimistic update on failure
+      haptics.error();
       setReminders(prev =>
         prev.map(r => r.id === id ? { ...r, enabled: !r.enabled } : r)
       );
@@ -103,6 +108,7 @@ export function ReminderProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteReminder = async (id: string) => {
+    haptics.remove();
     const snapshot = reminders; // save for rollback
     // Optimistic remove
     setReminders(prev => prev.filter(r => r.id !== id));
@@ -120,6 +126,7 @@ export function ReminderProvider({ children }: { children: React.ReactNode }) {
         });
       }
     } catch (err) {
+      haptics.error();
       setReminders(snapshot); // rollback
       setError(getApiError(err));
     }
