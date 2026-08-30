@@ -596,6 +596,22 @@ No credential leaks found.
 
 ## 12. Change Log Since 23 April 2026 Audit
 
+**Resolved on `day1/expo-57-upgrade` (30 August 2026):**
+- Expo SDK 54 → 57, React Native 0.81.5 → 0.86.3; Android now targets API 36 via
+  `expo-build-properties`, clearing Play's 31 August 2026 minimum (§4.8, §5.7).
+- `android.package` declared (§4.2). Notification icon asset added (§4.3).
+- Mapbox removed entirely; `react-native-maps` 1.27.2 in its place. The radius overlay
+  is now a metre-based `<Circle>` and is geographically correct (§5.3, §5.1–5.4).
+- Geocoding moved behind a `GeocodingProvider` interface backed by expo-location,
+  absorbing all three raw Mapbox fetch calls (§5.2).
+- Duplicated `UIBackgroundModes` deduped (§4.5).
+- `UNAuthorizationOptionCriticalAlert` removed from app config (§4.4 — the
+  `interruptionLevel` code change remains open in §3.12, scheduled for day 2).
+- `USE_FULL_SCREEN_INTENT` removed (§4.9). `SCHEDULE_EXACT_ALARM` added, which is the
+  configuration half of §3.11; the runtime scheduling change remains open.
+- `tsc --noEmit` is now clean — the `ExpoConfig.name` error is fixed and the archived
+  `lib/simulation/` directory is excluded from the build (§2.4, supersedes the note below).
+
 **Resolved:**
 - Location parameter contract between add-reminder and location-picker was reported
   corrected. It is **not** — see §3.7. Re-opened.
@@ -638,6 +654,7 @@ No credential leaks found.
   resolved by a different route than it proposed: rather than seeking the entitlement,
   the app drops to `timeSensitive`, which needs no approval and is the correct level
   for a location reminder (§5.6).
-- The April audit's lint findings were re-checked. Current state is 8 TypeScript errors,
-  all confined to `app.config.ts` and the archived `lib/simulation/` directory (§2.4).
+- The April audit's lint findings were re-checked. That audit recorded 8 TypeScript
+  errors confined to `app.config.ts` and the archived `lib/simulation/` directory (§2.4).
+  Both causes are fixed as of 30 August 2026; `tsc --noEmit` now reports none.
 
