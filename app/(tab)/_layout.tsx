@@ -1,6 +1,7 @@
 import { Tabs, useRouter } from 'expo-router';
 import { Home, Clock, Settings, Plus } from 'lucide-react-native';
 import { useTheme } from '@/context/themeContext';
+import { ACCENT } from '@/lib/theme';
 import { View, TouchableOpacity } from 'react-native';
 
 export default function AppLayout() {
@@ -12,7 +13,7 @@ export default function AppLayout() {
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarActiveTintColor: '#00d4d4',
+          tabBarActiveTintColor: ACCENT,
           tabBarInactiveTintColor: isDark ? '#a0a0a0' : '#6b7280',
           tabBarStyle: {
             backgroundColor: isDark ? '#1a1a1a' : '#ffffff',
@@ -69,7 +70,7 @@ export default function AppLayout() {
           onPress={() => router.push('/add-reminder')}
           activeOpacity={0.8}
           style={{
-            backgroundColor: '#00d4d4',
+            backgroundColor: ACCENT,
             borderRadius: 32,
             width: 64,
             height: 64,

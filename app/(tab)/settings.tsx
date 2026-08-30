@@ -23,6 +23,7 @@ import { Moon, Sun, Bell, Info, LogOut, ChevronRight, User, Trash2 } from 'lucid
 import { useTheme } from '@/context/themeContext';
 import { useAuth } from '@/context/authContext';
 import { checkPermissions, requestNotificationPermission } from '@/lib/location/permissions';
+import { ACCENT } from '@/lib/theme';
 
 export default function SettingsScreen() {
   const { isDark, toggleTheme } = useTheme();
@@ -229,7 +230,7 @@ export default function SettingsScreen() {
                 <Switch
                   value={isDark}
                   onValueChange={toggleTheme}
-                  trackColor={{ false: '#E5E7EB', true: '#00D4AA' }}
+                  trackColor={{ false: '#E5E7EB', true: ACCENT }}
                   thumbColor="#FFFFFF"
                   ios_backgroundColor="#E5E7EB"
                 />
@@ -261,7 +262,7 @@ export default function SettingsScreen() {
                 <Switch
                   value={notifications}
                   onValueChange={(next) => { void handleNotificationToggle(next); }}
-                  trackColor={{ false: '#E5E7EB', true: '#00D4AA' }}
+                  trackColor={{ false: '#E5E7EB', true: ACCENT }}
                   thumbColor="#FFFFFF"
                   ios_backgroundColor="#E5E7EB"
                 />

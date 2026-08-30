@@ -153,7 +153,6 @@ export default function RootLayout() {
   useEffect(() => {
     async function prepare() {
       try {
-        await new Promise(resolve => setTimeout(resolve, 2000));
         await ExpoSplashScreen.hideAsync();
         setAppReady(true);
       } catch (error) {

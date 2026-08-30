@@ -1,21 +1,23 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  FlatList, ActivityIndicator, SafeAreaView, StyleSheet,
+  FlatList, ActivityIndicator, SafeAreaView,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import { debounce } from 'lodash';
 import { X, Search, MapPin } from 'lucide-react-native';
-import { useTheme } from '@/context/themeContext';
 import ReminderMap from '@/components/maps/ReminderMap';
 import { Coordinates } from '@/lib/location/distance';
 import { geocoder, PlaceResult } from '@/lib/location/geocoding';
 import { haptics } from '@/lib/haptics';
 import { useLocationDraft } from '@/context/locationDraftContext';
+import { ACCENT } from '@/lib/theme';
+
+// Lucide takes a colour prop, not a class, so the muted tone is named here.
+const MUTED = '#6B7280';
 
 export default function LocationPickerScreen() {
-  const { isDark } = useTheme();
   const { setDraft } = useLocationDraft();
   const [query,        setQuery]        = useState('');
   const [results,      setResults]      = useState<PlaceResult[]>([]);
@@ -24,8 +26,6 @@ export default function LocationPickerScreen() {
   const [address,      setAddress]      = useState('');
   const [locationName, setLocationName] = useState('');
   const [locating,     setLocating]     = useState(true);
-
-  const c = isDark ? dark : light;
 
   // Get accurate GPS on mount
   useEffect(() => {
@@ -114,37 +114,37 @@ export default function LocationPickerScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: c.bg }]}>
+    <SafeAreaView className="flex-1 bg-background dark:bg-background-dark">
 
       {/* Header */}
-      <View style={styles.header}>
+      <View className="flex-row items-center justify-between px-5 py-4">
         <TouchableOpacity
-          style={[styles.iconBtn, { backgroundColor: c.card }]}
+          className="w-10 h-10 rounded-full items-center justify-center bg-card dark:bg-card-dark"
           onPress={() => router.back()}
         >
-          <X size={20} color={c.accent} />
+          <X size={20} color={ACCENT} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: c.text, fontFamily: 'Courier' }]}>
+        <Text className="text-foreground dark:text-foreground-dark text-[13px] font-bold tracking-[3px]">
           CHOOSE LOCATION
         </Text>
-        <View style={{ width: 40 }} />
+        <View className="w-10" />
       </View>
 
       {/* Search bar */}
-      <View style={[styles.searchBar, { backgroundColor: c.card }]}>
-        <Search size={18} color={c.muted} style={{ marginRight: 10 }} />
+      <View className="flex-row items-center mx-5 mb-3 rounded-2xl px-4 h-[52px] bg-card dark:bg-card-dark">
+        <Search size={18} color={MUTED} style={{ marginRight: 10 }} />
         <TextInput
           value={query}
           onChangeText={handleQueryChange}
           placeholder="Search for a place..."
-          placeholderTextColor={c.muted}
-          style={[styles.input, { color: c.text }]}
+          placeholderTextColor={MUTED}
+          className="flex-1 text-[15px] text-foreground dark:text-foreground-dark"
         />
         {searching
-          ? <ActivityIndicator size="small" color={c.accent} />
+          ? <ActivityIndicator size="small" color={ACCENT} />
           : query.length > 0
             ? <TouchableOpacity onPress={() => { setQuery(''); setResults([]); }}>
-                <X size={16} color={c.muted} />
+                <X size={16} color={MUTED} />
               </TouchableOpacity>
             : null
         }
@@ -152,22 +152,24 @@ export default function LocationPickerScreen() {
 
       {/* Autocomplete results */}
       {results.length > 0 && (
-        <View style={[styles.resultsContainer, { backgroundColor: c.card, borderColor: c.border }]}>
+        <View className="mx-5 mb-2.5 rounded-2xl max-h-[200px] overflow-hidden border bg-card dark:bg-card-dark border-border dark:border-border-dark">
           <FlatList
             data={results}
             keyExtractor={item => item.id}
             keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <TouchableOpacity
-                style={[styles.resultItem, { borderBottomColor: c.border }]}
+                className="flex-row items-center p-3.5 border-b border-border dark:border-border-dark"
                 onPress={() => selectPlace(item)}
               >
-                <View style={[styles.resultIconWrap, { backgroundColor: c.accentFaint }]}>
-                  <MapPin size={14} color={c.accent} />
+                <View className="w-8 h-8 rounded-full items-center justify-center mr-3 bg-accent/20 dark:bg-accent-dark/20">
+                  <MapPin size={14} color={ACCENT} />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.resultMain, { color: c.text }]}>{item.name}</Text>
-                  <Text style={[styles.resultSub,  { color: c.muted }]} numberOfLines={1}>
+                <View className="flex-1">
+                  <Text className="text-sm font-semibold mb-0.5 text-foreground dark:text-foreground-dark">
+                    {item.name}
+                  </Text>
+                  <Text className="text-xs text-muted-foreground dark:text-muted-foreground-dark" numberOfLines={1}>
                     {item.address}
                   </Text>
                 </View>
@@ -178,11 +180,11 @@ export default function LocationPickerScreen() {
       )}
 
       {/* Map */}
-      <View style={[styles.mapContainer, { borderColor: c.border }]}>
+      <View className="mx-5 rounded-[20px] overflow-hidden border border-border dark:border-border-dark">
         {locating ? (
-          <View style={[styles.mapPlaceholder, { backgroundColor: c.card }]}>
-            <ActivityIndicator size="large" color={c.accent} />
-            <Text style={[styles.locatingText, { color: c.muted }]}>
+          <View className="h-[320px] items-center justify-center gap-3 bg-card dark:bg-card-dark">
+            <ActivityIndicator size="large" color={ACCENT} />
+            <Text className="text-[13px] text-muted-foreground dark:text-muted-foreground-dark">
               Getting your location...
             </Text>
           </View>
@@ -198,33 +200,39 @@ export default function LocationPickerScreen() {
 
       {/* Selected place pill */}
       {locationName ? (
-        <View style={[styles.selectedPill, { backgroundColor: c.card, borderColor: c.border }]}>
-          <View style={[styles.pillDot, { backgroundColor: c.accentFaint }]}>
-            <MapPin size={12} color={c.accent} />
+        <View className="flex-row items-center mx-5 mt-3 p-3.5 rounded-2xl border bg-card dark:bg-card-dark border-border dark:border-border-dark">
+          <View className="w-8 h-8 rounded-full items-center justify-center mr-3 bg-accent/20 dark:bg-accent-dark/20">
+            <MapPin size={12} color={ACCENT} />
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.pillName, { color: c.text }]}>{locationName}</Text>
-            <Text style={[styles.pillAddress, { color: c.muted }]} numberOfLines={1}>
+          <View className="flex-1">
+            <Text className="text-sm font-semibold text-foreground dark:text-foreground-dark">
+              {locationName}
+            </Text>
+            <Text className="text-xs mt-0.5 text-muted-foreground dark:text-muted-foreground-dark" numberOfLines={1}>
               {address}
             </Text>
           </View>
         </View>
       ) : null}
 
-      {/* Confirm button — matches your rounded-full accent button */}
+      {/* Confirm button */}
       <TouchableOpacity
-        style={[
-          styles.confirm,
-          { backgroundColor: selected && !locating ? c.accent : c.card },
-        ]}
+        className={`mx-5 mt-4 mb-2 rounded-full h-14 items-center justify-center ${
+          selected && !locating
+            ? 'bg-accent dark:bg-accent-dark'
+            : 'bg-card dark:bg-card-dark'
+        }`}
         onPress={confirmSelection}
         disabled={!selected || locating}
         activeOpacity={0.8}
       >
-        <Text style={[
-          styles.confirmText,
-          { color: selected && !locating ? c.accentForeground : c.muted },
-        ]}>
+        <Text
+          className={`text-base font-bold ${
+            selected && !locating
+              ? 'text-accent-foreground dark:text-accent-foreground-dark'
+              : 'text-muted-foreground dark:text-muted-foreground-dark'
+          }`}
+        >
           Confirm Location
         </Text>
       </TouchableOpacity>
@@ -232,49 +240,3 @@ export default function LocationPickerScreen() {
     </SafeAreaView>
   );
 }
-
-// ── Theme tokens 
-const dark = {
-  bg:              '#0f0f0f',
-  card:            '#1a1a1a',
-  text:            '#ffffff',
-  muted:           '#6B7280',
-  border:          '#2a2a2a',
-  accent:          '#00D4AA',
-  accentFaint:     'rgba(0,212,170,0.15)',
-  accentForeground: '#0f0f0f',
-};
-
-const light = {
-  bg:              '#f9f9f9',
-  card:            '#ffffff',
-  text:            '#1a1a1a',
-  muted:           '#6B7280',
-  border:          '#e5e7eb',
-  accent:          '#00D4AA',
-  accentFaint:     'rgba(0,212,170,0.15)',
-  accentForeground: '#ffffff',
-};
-
-const styles = StyleSheet.create({
-  container:      { flex: 1 },
-  header:         { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16 },
-  iconBtn:        { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  headerTitle:    { fontSize: 13, fontWeight: '700', letterSpacing: 3 },
-  searchBar:      { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 12, borderRadius: 16, paddingHorizontal: 16, height: 52 },
-  input:          { flex: 1, fontSize: 15 },
-  resultsContainer: { marginHorizontal: 20, borderRadius: 16, marginBottom: 10, maxHeight: 200, overflow: 'hidden', borderWidth: 1 },
-  resultItem:     { flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: 1 },
-  resultIconWrap: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  resultMain:     { fontSize: 14, fontWeight: '600', marginBottom: 2 },
-  resultSub:      { fontSize: 12 },
-  mapContainer:   { marginHorizontal: 20, borderRadius: 20, overflow: 'hidden', borderWidth: 1 },
-  mapPlaceholder: { height: 320, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  locatingText:   { fontSize: 13 },
-  selectedPill:   { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginTop: 12, padding: 14, borderRadius: 16, borderWidth: 1 },
-  pillDot:        { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  pillName:       { fontSize: 14, fontWeight: '600' },
-  pillAddress:    { fontSize: 12, marginTop: 2 },
-  confirm:        { marginHorizontal: 20, marginTop: 16, marginBottom: 8, borderRadius: 100, height: 56, alignItems: 'center', justifyContent: 'center' },
-  confirmText:    { fontSize: 16, fontWeight: '700' },
-});

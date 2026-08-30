@@ -9,6 +9,7 @@ import { useTheme } from '@/context/themeContext';
 import { useReminders } from '@/context/reminderContext';
 import type { Reminder } from '@/lib/api';
 import { Coordinates, getDistanceMetres, formatDistance } from '@/lib/location/distance';
+import { ACCENT } from '@/lib/theme';
 
 
 // Distance comes from the screen's single location watch. Each card used to
@@ -349,7 +350,7 @@ export default function HomeScreen() {
               {getGreeting()} 👋
             </Text>
             <View className="flex-row items-center">
-              <MapPin size={16} color={'#00D4AA'} />
+              <MapPin size={16} color={ACCENT} />
               <Text className="text-accent dark:text-accent-dark text-sm ml-1 font-bold tracking-wider uppercase">
                 {locationLabel}
               </Text>
@@ -383,7 +384,7 @@ export default function HomeScreen() {
           </Text>
           <TouchableOpacity onPress={() => router.push('/add-reminder')}>
             <View className="flex-row items-center">
-              <Plus size={16} color="#00D4AA" />
+              <Plus size={16} color={ACCENT} />
               <Text className="text-accent dark:text-accent-dark text-xs font-bold ml-1">Add New</Text>
             </View>
           </TouchableOpacity>
@@ -399,7 +400,7 @@ export default function HomeScreen() {
             <RefreshControl 
               refreshing={refreshing} 
               onRefresh={onRefresh}
-              tintColor="#00D4AA"
+              tintColor={ACCENT}
             />
           }
           ListHeaderComponent={
@@ -449,7 +450,7 @@ export default function HomeScreen() {
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center py-12 px-6">
               <View className="bg-card dark:bg-card-dark rounded-3xl p-8 items-center w-full">
-                <MapPin size={48} color="#00D4AA" />
+                <MapPin size={48} color={ACCENT} />
                 <Text className="text-foreground dark:text-foreground-dark font-bold text-lg mt-4 mb-2">
                   {search ? 'No reminders found' : 'No reminders yet'}
                 </Text>
@@ -476,7 +477,7 @@ export default function HomeScreen() {
 
         {isLoading && reminders.length > 0 ? (
           <View className="absolute top-4 right-6 rounded-full bg-card dark:bg-card-dark px-3 py-1.5 border border-border dark:border-border-dark flex-row items-center">
-            <ActivityIndicator size="small" color="#00D4AA" />
+            <ActivityIndicator size="small" color={ACCENT} />
             <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs ml-2">Syncing</Text>
           </View>
         ) : null}

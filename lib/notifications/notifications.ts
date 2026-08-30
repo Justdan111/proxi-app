@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { ACCENT } from '../theme';
 
 // ── Android channel ──────────────────────────────────
 // An Android channel's importance, sound, and vibration are frozen at creation.
@@ -31,7 +32,7 @@ export async function setupNotificationChannel() {
     importance:               Notifications.AndroidImportance.MAX,
     sound:                    'proxi_alert.wav',     // filename only, no path
     vibrationPattern:         [0, 500, 200, 500],   // wait, buzz, pause, buzz
-    lightColor:               '#6366f1',
+    lightColor:               ACCENT,
     lockscreenVisibility:     Notifications.AndroidNotificationVisibility.PUBLIC,
     bypassDnd:                true,   // ← breaks through Do Not Disturb
     enableLights:             true,
@@ -88,7 +89,7 @@ export async function sendReminderNotification(data: ReminderNotificationData) {
     ...(Platform.OS === 'android' && {
       sticky:  false,
       vibrate: [0, 500, 200, 500],
-      color:   '#6366f1',
+      color:   ACCENT,
     }),
 
     // iOS — timeSensitive breaks through Focus modes and needs no entitlement.

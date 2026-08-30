@@ -8,6 +8,7 @@ import { useReminders } from '@/context/reminderContext';
 import ReminderMap from '@/components/maps/ReminderMap';
 import { haptics } from '@/lib/haptics';
 import { useLocationDraft } from '@/context/locationDraftContext';
+import { ACCENT } from '@/lib/theme';
 
 // The reminder icon had no way to be set, so every reminder saved as the
 // default pin. These are the choices offered for it.
@@ -164,11 +165,10 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
           {/* Header */}
           <Animated.View style={headerAnimatedStyle} className="flex-row items-center justify-between mb-8">
             <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 items-center justify-center">
-              <X size={24} color={isDark ? '#00D4AA' : '#1a1a1a'} />
+              <X size={24} color={isDark ? ACCENT : '#1a1a1a'} />
             </TouchableOpacity>
             <Text 
               className="text-foreground dark:text-foreground-dark text-lg font-bold tracking-[3px] uppercase"
-              style={{ fontFamily: 'Courier' }}
             >
               New Reminder
             </Text>
@@ -333,7 +333,7 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
                   <View className="flex-1 items-center">
                     <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs mb-2">FROM</Text>
                     <View className="flex-row items-center bg-background dark:bg-background-dark rounded-xl px-4 py-3">
-                      <Clock size={16} color="#00D4AA" style={{ marginRight: 8 }} />
+                      <Clock size={16} color={ACCENT} style={{ marginRight: 8 }} />
                       <TextInput
                         value={startTime}
                         onChangeText={setStartTime}
@@ -347,7 +347,7 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
                   <View className="flex-1 items-center">
                     <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs mb-2">TO</Text>
                     <View className="flex-row items-center bg-background dark:bg-background-dark rounded-xl px-4 py-3">
-                      <Clock size={16} color="#00D4AA" style={{ marginRight: 8 }} />
+                      <Clock size={16} color={ACCENT} style={{ marginRight: 8 }} />
                       <TextInput
                         value={endTime}
                         onChangeText={setEndTime}
