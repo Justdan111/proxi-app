@@ -87,10 +87,48 @@ what each day resolved; §13 is this re-audit.
 
 | § | Item | Why it blocks |
 |---|---|---|
-| **4.1** | `DELETE /api/auth/me` does not exist on the backend | **iOS cannot be submitted.** Apple 5.1.1(v). The client is complete — the Settings row, the confirmation and the teardown all work — and 404s until the endpoint ships |
-| **3.3** | Unconfirmed: does `PUT /api/reminders/:id` accept `triggered`? | If it does not, `once` reminders still auto-disable through the `toggle` fallback, but the Completed badge never appears. Verified by device check 2.4c: reinstall, sign in, and see whether completion survived |
+| **4.1** | `DELETE /api/auth/me` does not exist on the backend | **iOS cannot be submitted.** Apple 5.1.1(v). The client is complete — the Settings row, the confirmation and the teardown all work — and 404s until the endpoint ships. See the note below: this may be smaller than "blocked on the backend" suggests |
 | **11.9** | Neither store account is enrolled | Enrol with Apple as an **individual** — organization enrolment needs a D-U-N-S number and adds one to two weeks |
 | — | **12 Google Play testers are not recruited** | 12 testers × 14 **continuous** days of closed testing before a new personal account gets production access. Pure wall-clock, not work. The clock has not started, and this single item sets the Play date regardless of engineering. Aim for 15 — dropping below 12 restarts it |
+
+#### §4.1 is one route, and it may block both stores
+
+Two things this row has been understating.
+
+**It is probably not a cross-team dependency.** The API is the project's own Railway
+service. If the person writing it is the same person reading this, "blocked on the backend"
+means one route handler: authenticate from the same JWT, hard-delete the user together with
+their reminders and activity, invalidate the token, return `204`. Not a quarter's work — and
+it is the single thing standing between a finished app and an iOS submission.
+
+**It may not be Apple-only.** This report scopes account deletion to Apple 5.1.1(v), but
+Google Play also requires account deletion for apps that allow account creation, in-app and
+via a web URL, declared in the Data Safety form. **Confirm this in Play Console before
+scoping the work** — if it applies, the same endpoint blocks both stores rather than one,
+which changes its priority relative to everything else on this page.
+
+There is no client-side substitute for either store. Clearing local storage is not deletion:
+the account still exists and signing in restores it, which is precisely the pattern Apple
+rejects. Directing users to email support does not satisfy the in-app requirement.
+
+### Open questions — answerable here, without waiting on anyone
+
+These are **unknowns, not missing work.** They were previously filed alongside the genuine
+external blockers, which made them look like they were waiting on somebody. They are not.
+
+| § | Question | How to settle it |
+|---|---|---|
+| **3.3** | Does `PUT /api/reminders/:id` accept `triggered`? | The endpoint already exists; only field acceptance is in doubt. Log in against the API, `PUT {"triggered": true}` to a reminder, and read the response back. If it returns `triggered: true` the question closes; if it echoes `false` or drops the field, the server ignores it |
+
+**Neither outcome blocks launch.** If the field is ignored, `once` reminders still
+auto-disable through the `toggle` fallback and the only loss is the green "Completed" badge.
+Should it come to that, the badge could instead be rendered from the local
+`proxi_triggered_cache` the geofence task already writes — correct day to day, lost on
+reinstall. That is deliberately **not** built yet: it is speculative complexity until the
+question above has an answer.
+
+Device check 2.4c reaches the same conclusion from the other direction — reinstall, sign in,
+and see whether completion survived — but does not require a device to answer.
 
 ### Code — from the 30 August re-audit (§13)
 
@@ -101,11 +139,13 @@ Small, and all in this repository. Sequenced by what a tester would hit first.
 | **13.1** | Granting location permission outside the app never starts geofencing until a restart — re-check on foreground | **P1** |
 | **13.3** | The Activity tab never refreshes; reload on focus | **P1** |
 | **13.2** | Geofencing runs a foreground service and samples location with zero enabled reminders | P2 |
-| **13.4** | The place-search debounce is never cancelled, and `useCallback` re-allocates it every render | P2 |
 | **13.5** | Four `console.log` calls ship, three still tagged `[v0]`, on swallowed error paths | P2 |
+| ~~13.4~~ | ~~Place-search debounce never cancelled~~ | **Fixed** |
+| ~~13.7~~ | ~~Six geocoding calls per keystroke burst~~ | **Fixed** |
 
 §13.6 records which lint errors are real and which are a rule firing on a correct pattern —
-read it before "fixing" any of them.
+read it before "fixing" any of them. With §13.4 fixed, lint is down to **6 problems
+(3 errors, 3 warnings)**, and every remaining one is in the accepted category.
 
 ### Needs an asset
 
@@ -922,7 +962,7 @@ turned a dormant bug into a visible one.
 Home already re-fetches on foreground ([app/_layout.tsx:96](app/_layout.tsx#L96)); Activity
 should reload on focus for the same reason.
 
-### 13.4 The place-search debounce is never cancelled — P2
+### 13.4 The place-search debounce is never cancelled — P2 — **RESOLVED**
 
 [app/location-picker.tsx:61–74](app/location-picker.tsx#L61)
 
@@ -939,8 +979,9 @@ Two problems in one line:
    allocating a fresh debounced function that `useCallback` then discards. This is what the
    remaining lint error at `location-picker.tsx:62` is reporting.
 
-Fix both by creating the debounced function in a `useEffect`/`useRef` and cancelling it in
-the cleanup.
+**Resolved on `fix/geocoding-request-volume`.** The debounced function is built once inside
+an effect, held in a ref, and cancelled in the cleanup, with a closure guard on every
+`setState` that follows an `await`. `location-picker.tsx` is now entirely lint-clean.
 
 ### 13.5 Scaffold debug logging ships to production — P2
 
@@ -958,18 +999,44 @@ These are swallowed error paths, so they also hide real failures behind a log li
 or crash reporter will see. The `console.warn`/`console.error` calls in `themeContext.tsx`
 and `geofencing.ts` are deliberate and should stay.
 
-### 13.6 Lint state — 4 errors, 4 warnings
+### 13.7 Place search issued six geocoding calls per keystroke burst — P1 — **RESOLVED**
+
+[lib/location/geocoding.ts](lib/location/geocoding.ts)
+
+Found while answering whether Apple Maps covers everything the app needs. It does — but
+place search does not go through MapKit at all. It goes through `expo-location`'s
+`geocodeAsync`, which is **CLGeocoder** on iOS and the platform geocoder on Android, and
+both throttle.
+
+`geocodeAsync` returns coordinates with no labels, so `search()` reverse-geocoded every
+result to name it — up to five extra calls, issued **concurrently** through `Promise.all`,
+on top of the forward call. Six requests per debounced keystroke burst.
+
+`expo-location`'s own documentation warns that "creating too many requests at a time can
+result in an error". This is precisely that pattern, and its failure mode is quietly
+misleading: **throttled search looks identical to a geocoder with poor coverage.** Left in
+place, the first iOS test would have measured our request volume and been read as a verdict
+on Apple's data — the exact judgement that decides whether Google Places (§5.2) stops being
+a fast-follow and becomes required.
+
+**Resolved on `fix/geocoding-request-volume`.** Only the top hit is reverse-geocoded, and
+sequentially — two calls per search rather than six concurrent. Results beyond the first
+carry the query as their label and are named properly when chosen, which is one call on a
+deliberate action instead of five on every keystroke.
+
+### 13.6 Lint state — now 3 errors, 3 warnings
 
 Not all of these are defects, and the distinction matters so nobody "fixes" the wrong ones.
 
-**Accepted — a rule firing on a pattern that is correct here.** Three of the four errors are
+**Accepted — a rule firing on a pattern that is correct here.** All three remaining errors are
 `Calling setState synchronously within an effect`, raised on Reanimated shared-value writes
 (`headerOpacity.value = withTiming(...)`) in `activity.tsx:110`, `home.tsx:254` and on the
 draft-consuming effect in `add-reminder.tsx:64`. `reactCompiler: true` is enabled in
 `app.json`, and this is the documented way to drive Reanimated entrance animations. Leave
 them.
 
-**Real — see §13.4.** `location-picker.tsx:62`, the non-inline `useCallback`.
+**Real — was `location-picker.tsx:62`, the non-inline `useCallback`. Fixed; see §13.4.**
+That file is now entirely lint-clean.
 
 **Warnings** are all `exhaustive-deps` on Reanimated shared values, which are stable
 references by design. Harmless.
