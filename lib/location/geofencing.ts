@@ -105,71 +105,111 @@ async function completeOnceReminder(reminder: Reminder) {
 }
 
 // ─── Core proximity check logic
-async function checkProximity(userCoords: Coordinates) {
+// The location task and the backup fetch task share this JS context and can
+// overlap. A check reads the fence state, then awaits notification delivery and
+// up to three network calls before writing it back — so two concurrent runs can
+// both observe "not yet notified" and both send. Serialising them keeps that
+// read-modify-write atomic, which is what makes "exactly one notification per
+// visit" actually hold.
+let checkQueue: Promise<void> = Promise.resolve();
+
+function checkProximity(userCoords: Coordinates): Promise<void> {
+  // A rejected link must not poison the queue for every later check.
+  checkQueue = checkQueue.then(
+    () => runProximityCheck(userCoords),
+    () => runProximityCheck(userCoords)
+  );
+  return checkQueue;
+}
+
+async function runProximityCheck(userCoords: Coordinates) {
   const reminders    = await getCachedReminders();
   const triggeredIds = await getTriggeredIds();
   const { occupied, notified } = await getFenceState();
 
   let stateChanged = false;
 
-  for (const reminder of reminders) {
-    const distance   = getDistanceMetres(userCoords, reminder.coordinates);
-    const wasInside  = occupied.has(reminder.id);
-    // Entering uses the true radius; leaving has to clear the wider ring.
-    const threshold  = wasInside ? reminder.radius * EXIT_HYSTERESIS : reminder.radius;
-    const inside     = distance <= threshold;
+  // Drop state for reminders that are no longer cached — deleted, or disabled,
+  // since the cache only holds enabled ones. Nothing else visits their ids, so
+  // without this the state grows without bound, and re-enabling a reminder
+  // while standing inside its radius would stay silent until the user left and
+  // came back.
+  const liveIds = new Set(reminders.map(r => r.id));
+  for (const id of [...occupied]) {
+    if (!liveIds.has(id)) { occupied.delete(id); stateChanged = true; }
+  }
+  for (const id of [...notified]) {
+    if (!liveIds.has(id)) { notified.delete(id); stateChanged = true; }
+  }
 
-    if (!inside) {
-      if (wasInside) {
-        occupied.delete(reminder.id);
-        notified.delete(reminder.id);
+  for (const reminder of reminders) {
+    try {
+      const distance   = getDistanceMetres(userCoords, reminder.coordinates);
+      const wasInside  = occupied.has(reminder.id);
+      // Entering uses the true radius; leaving has to clear the wider ring.
+      const threshold  = wasInside ? reminder.radius * EXIT_HYSTERESIS : reminder.radius;
+      const inside     = distance <= threshold;
+
+      if (!inside) {
+        if (wasInside) {
+          occupied.delete(reminder.id);
+          notified.delete(reminder.id);
+          stateChanged = true;
+        }
+        continue;
+      }
+
+      if (!wasInside) {
+        occupied.add(reminder.id);
         stateChanged = true;
       }
-      continue;
-    }
 
-    if (!wasInside) {
-      occupied.add(reminder.id);
-      stateChanged = true;
-    }
+      // Already alerted for this visit — this is what stops the once-a-minute spam.
+      if (notified.has(reminder.id)) continue;
 
-    // Already alerted for this visit — this is what stops the once-a-minute spam.
-    if (notified.has(reminder.id)) continue;
+      // Skip "once" reminders that already fired
+      if (reminder.frequency === 'once' && triggeredIds.has(reminder.id)) continue;
 
-    // Skip "once" reminders that already fired
-    if (reminder.frequency === 'once' && triggeredIds.has(reminder.id)) continue;
+      // Outside the active window. Stay occupied but owe the alert, so it fires
+      // once the window opens rather than never.
+      if (!isInTimeframe(reminder.timeframe)) continue;
 
-    // Outside the active window. Stay occupied but owe the alert, so it fires
-    // once the window opens rather than never.
-    if (!isInTimeframe(reminder.timeframe)) continue;
-
-    await sendReminderNotification({
-      reminderId:    reminder.id,
-      reminderTitle: reminder.title,
-      location:      reminder.location,
-      icon:          reminder.icon,
-    });
-
-    notified.add(reminder.id);
-    stateChanged = true;
-
-    if (reminder.frequency === 'once') {
-      await markTriggered(reminder.id);
-      await completeOnceReminder(reminder);
-    }
-
-    // Log to the API. Goes through the shared client, so it picks up the JWT
-    // from SecureStore and the same base URL as every other request.
-    try {
-      await activitiesApi.log({
+      await sendReminderNotification({
         reminderId:    reminder.id,
         reminderTitle: reminder.title,
         location:      reminder.location,
         icon:          reminder.icon,
-        eventType:     'triggered',
       });
-    } catch {
-      // Non-critical — notification already sent
+
+      // Persist the "already alerted" mark before the network calls below, so a
+      // crash or a kill mid-request cannot resurrect the notification.
+      notified.add(reminder.id);
+      stateChanged = true;
+      await setFenceState(occupied, notified);
+
+      if (reminder.frequency === 'once') {
+        await markTriggered(reminder.id);
+        await completeOnceReminder(reminder);
+      }
+
+      // Log to the API. Goes through the shared client, so it picks up the JWT
+      // from SecureStore and the same base URL as every other request.
+      try {
+        await activitiesApi.log({
+          reminderId:    reminder.id,
+          reminderTitle: reminder.title,
+          location:      reminder.location,
+          icon:          reminder.icon,
+          eventType:     'triggered',
+        });
+      } catch {
+        // Non-critical — notification already sent
+      }
+    } catch (err) {
+      // One bad reminder must not abort the pass. Without this, a throw here
+      // skipped every remaining reminder and discarded the occupancy changes
+      // already worked out for the earlier ones.
+      console.error('[Geofence] reminder', reminder.id, err);
     }
   }
 

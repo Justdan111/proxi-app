@@ -14,8 +14,9 @@ import { ACCENT } from '@/lib/theme';
 
 // Distance comes from the screen's single location watch. Each card used to
 // call getCurrentPositionAsync itself when it had no coordinates, which meant
-// one GPS fix per card on screen.
-function useDistanceToReminder(reminder: Reminder, currentCoordinates: Coordinates | null) {
+// one GPS fix per card on screen. Deliberately not a hook — it holds no state,
+// and the early return would make it an illegal one.
+function distanceToReminder(reminder: Reminder, currentCoordinates: Coordinates | null) {
   if (!currentCoordinates) return null;
   return formatDistance(getDistanceMetres(currentCoordinates, reminder.coordinates));
 }
@@ -29,7 +30,7 @@ type ReminderCardProps = {
 };
 
 function ReminderCard({ item, index, onToggle, onOpenDetails, currentCoordinates }: ReminderCardProps) {
-  const distance = useDistanceToReminder(item, currentCoordinates);
+  const distance = distanceToReminder(item, currentCoordinates);
 
   return (
     <Animated.View
