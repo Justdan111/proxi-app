@@ -2,11 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, SafeAreaView,  Modal } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Easing,  SlideInUp, FadeInDown, } from 'react-native-reanimated';
 import { X, Check, Clock, Repeat, Repeat1, MapPin } from 'lucide-react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useTheme } from '@/context/themeContext';
 import { useReminders } from '@/context/reminderContext';
 import ReminderMap from '@/components/maps/ReminderMap';
 import { haptics } from '@/lib/haptics';
+import { useLocationDraft } from '@/context/locationDraftContext';
+
+// The reminder icon had no way to be set, so every reminder saved as the
+// default pin. These are the choices offered for it.
+const REMINDER_ICONS = ['📍', '🏠', '🏢', '🛒', '💊', '🏋️', '☕', '🎓', '🚗', '✈️'];
 
 const TIME_24H_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -41,13 +46,7 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
   const router = useRouter();
   const { isDark } = useTheme();
   const { createReminder, error: reminderError } = useReminders();
-  const params = useLocalSearchParams<{ 
-    selectedLocation?: string; 
-    selectedAddress?: string;
-    selectedLat?: string;
-    selectedLon?: string;
-    selectedIcon?: string;
-  }>();
+  const { draft, clearDraft } = useLocationDraft();
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -55,23 +54,15 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
   const buttonOpacity = useSharedValue(0);
   const buttonScale = useSharedValue(0.95);
 
-  // Handle selected location from location-picker
+  // Handle selected location from location-picker. Consumed once, so
+  // re-entering the screen does not resurrect a stale choice.
   useEffect(() => {
-    if (params.selectedLocation) {
-      setLocationName(params.selectedLocation);
-      setLocationAddress(params.selectedAddress || '');
-      if (params.selectedLat && params.selectedLon) {
-        const coords = {
-          latitude: parseFloat(params.selectedLat),
-          longitude: parseFloat(params.selectedLon),
-        };
-        setLocationCoords(coords);
-      }
-      if (params.selectedIcon) {
-        setLocationIcon(params.selectedIcon);
-      }
-    }
-  }, [params.selectedLocation, params.selectedAddress, params.selectedLat, params.selectedLon, params.selectedIcon]);
+    if (!draft) return;
+    setLocationName(draft.name);
+    setLocationAddress(draft.address);
+    setLocationCoords(draft.coordinates);
+    clearDraft();
+  }, [draft, clearDraft]);
 
   useEffect(() => {
     // Staggered entrance animations
@@ -202,6 +193,30 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
           </Animated.View>
 
           {/* Location */}
+          {/* Icon */}
+          <Animated.View entering={FadeInDown.delay(150).springify()} className="mb-6">
+            <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold uppercase tracking-[2px] mb-3">
+              Icon
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View className="flex-row gap-2">
+                {REMINDER_ICONS.map((icon) => (
+                  <TouchableOpacity
+                    key={icon}
+                    onPress={() => { haptics.toggle(); setLocationIcon(icon); }}
+                    className={`w-14 h-14 rounded-2xl items-center justify-center border ${
+                      locationIcon === icon
+                        ? 'bg-accent/20 dark:bg-accent-dark/20 border-accent dark:border-accent-dark'
+                        : 'bg-card dark:bg-card-dark border-border dark:border-border-dark'
+                    }`}
+                  >
+                    <Text className="text-2xl">{icon}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          </Animated.View>
+
           <Animated.View entering={FadeInDown.delay(200).springify()} className="mb-6">
             <View className="flex-row items-center justify-between mb-3">
               <Text className="text-muted-foreground dark:text-muted-foreground-dark text-xs font-bold uppercase tracking-[2px]">

@@ -10,6 +10,7 @@ import { AppState, StatusBar } from 'react-native';
 import { ThemeProvider } from '@/context/themeContext';
 import { AuthProvider, useAuth } from '@/context/authContext';
 import { ReminderProvider, useReminders } from '@/context/reminderContext';
+import { LocationDraftProvider } from '@/context/locationDraftContext';
 import SplashScreen from '@/components/splashScreen';
 import {
   setupNotificationChannel,
@@ -171,9 +172,11 @@ export default function RootLayout() {
       <ThemeProvider>
         <AuthProvider>
           <ReminderProvider>
-            <AppInitializer />
-            <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
-            <RootNavigator />
+            <LocationDraftProvider>
+              <AppInitializer />
+              <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
+              <RootNavigator />
+            </LocationDraftProvider>
           </ReminderProvider>
         </AuthProvider>
       </ThemeProvider>

@@ -12,9 +12,11 @@ import ReminderMap from '@/components/maps/ReminderMap';
 import { Coordinates } from '@/lib/location/distance';
 import { geocoder, PlaceResult } from '@/lib/location/geocoding';
 import { haptics } from '@/lib/haptics';
+import { useLocationDraft } from '@/context/locationDraftContext';
 
 export default function LocationPickerScreen() {
   const { isDark } = useTheme();
+  const { setDraft } = useLocationDraft();
   const [query,        setQuery]        = useState('');
   const [results,      setResults]      = useState<PlaceResult[]>([]);
   const [searching,    setSearching]    = useState(false);
@@ -103,14 +105,12 @@ export default function LocationPickerScreen() {
   const confirmSelection = () => {
     if (!selected) return;
     haptics.select();
-    router.back();
-    // ✅ Matches exactly what add-reminder.tsx reads
-    router.setParams({
-      selectedLocation: locationName,
-      selectedAddress:  address,
-      selectedLat:      String(selected.latitude),
-      selectedLon:      String(selected.longitude),
+    setDraft({
+      name:        locationName,
+      address:     address,
+      coordinates: selected,
     });
+    router.back();
   };
 
   return (
