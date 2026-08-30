@@ -62,7 +62,10 @@ The highest-risk section. Every item here fixes something that has never once wo
 - [ ] Turn **Do Not Disturb on**, then trigger a reminder. It must still sound.
       *DND bypass has never once applied in this app — do not assume it works because the
       code says `bypassDnd: true`*
-- [ ] The custom sound plays, and the vibration pattern is the double-buzz, not the default
+- [ ] The custom sound plays — a **24-second** alternating two-tone alarm, not a short
+      chime — and the vibration is the double-buzz, not the default
+      *(if you hear a 3-second chime you are on a stale `proxi-alarm-v2` channel from a
+      build made before the sound landed: uninstall and reinstall, per §0.3)*
 
 ### 2.2 No more spam
 - [ ] Walk into a geofence: **exactly one** notification
