@@ -13,9 +13,9 @@ blockers, and intent — the things that are not recoverable from the diff.
 
 **Branch:** `fix/geofence-restart-and-activity-refresh` → PR #11 (open, awaiting review)
 
-*PR #9 has since merged and been merged back in here. PR #10 (the alarm tone) is still
-open and also top-inserts a session-log entry, so it will need the same treatment — three
-branches all adding an entry at the same anchor is what caused this.*
+*PRs #9 and #10 have both merged and been merged back in here. Three branches all
+top-inserting an entry at the same anchor collided twice; see the note at the foot of this
+entry.*
 
 ### §13.1 — permission granted outside the app now starts geofencing
 The check is extracted as `syncGeofencing` and runs on every foreground alongside the
@@ -47,9 +47,65 @@ Neither fix is provable from the code, and both are easy to *assume* working:
   backgrounded on Activity and foreground the app. The entry should already be there both
   times, with no pull-to-refresh.
 
+### A process note worth keeping
+This branch hit the same conflict twice, and it was predictable both times. Every branch
+appends its entry to the **top** of `SESSION_LOG.md`, at the same anchor, so any two open
+branches are guaranteed to collide there — and a third collides again after the second
+merges. The same happened in `AUDIT_REPORT.md` where two branches each added a row to the
+resolved table.
+
+Nothing was lost; every resolution was "keep both sides". But if parallel branches are used
+again, avoid the cost up front by either appending new entries at the **bottom** of the log,
+or keeping doc updates in a single branch and leaving code branches doc-free.
+
 ### Next action
 Unchanged and external: 12 Play testers, `DELETE /api/auth/me`, both enrollments. §13.2 and
 §13.5 remain open at P2 and do not gate a tester build.
+
+---
+
+## 2026-08-30 — The alarm tone, and a filename that would have failed silently
+
+**Branch:** `fix/alarm-sound` → PR #10 (open, awaiting review)
+
+### The filename in §5.8 was wrong
+Dan referred to `assets/sounds/proxi-alert.wav`. That file does not exist — he was quoting
+the audit, which still carried the pre-rename name. The real file is `proxi_alert.wav` with
+an **underscore**; it was renamed in `6229e29` because **Android resource names reject
+hyphens**.
+
+This mattered more than a typo. The failure is silent: a hyphenated sound produces no build
+error, no warning, no log line — the channel just falls back to the default notification
+sound. Someone following the audit could have dropped in a correctly-made 25-second alarm,
+shipped it, and heard the stock Android chime with nothing anywhere explaining why. Fixed
+in §5.8, with the naming rule stated explicitly for whoever replaces the asset next.
+
+### §5.8 resolved
+Replaced the 3.36s stereo chime with a synthesised **24.00s** tone — mono, 16-bit, 44.1kHz,
+−1.0 dBFS, verified against the iOS 30-second cap. Four alternating tones (880 Hz / 1108 Hz,
+0.22s each), then a 0.94s rest, repeating every 2 seconds.
+
+Three constraints drove it, recorded in §5.8 so a future replacement does not lose them:
+30s is iOS's hard cap; fundamentals stay between 800 Hz and 1.2 kHz because phone speakers
+roll off below ~500 Hz; and each tone carries 2nd and 3rd harmonics because a pure sine is
+easy to miss on a small speaker.
+
+**The generator is checked in** at `scripts/generate-alarm-tone.py` rather than only the
+WAV, so the pattern can be retuned without reverse-engineering an audio file.
+
+### No channel bump needed — but only just
+Android freezes a channel's sound at creation, so this had to land **before** any build
+reached a device. It did, so `proxi-alarm-v2` stands and no `v3` is required.
+
+One caveat carried into device QA §2.1d: a device that ran a **local** build after day 2
+merged may already hold a v2 channel bound to the old chime. Hearing a 3-second chime during
+testing means a stale channel, not a broken sound — uninstall and reinstall, which §0.3
+already requires.
+
+### Next action
+Unchanged and external: 12 Play testers, `DELETE /api/auth/me`, both enrollments. The two
+P1s from the re-audit — §13.1 and §13.3 — are still open and should land before any tester
+build.
 
 ---
 
