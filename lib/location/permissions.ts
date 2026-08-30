@@ -34,9 +34,13 @@ export async function requestNotificationPermission(): Promise<boolean> {
 
 // Request all permissions at once — call on first app launch
 export async function requestAllPermissions(): Promise<PermissionStatus> {
-  const foregroundLocation  = await requestForegroundLocation();
-  const backgroundLocation  = await requestBackgroundLocation();
-  const notifications       = await requestNotificationPermission();
+  // requestBackgroundLocation requests foreground first, so asking for
+  // foreground separately here prompted the user twice for the same thing.
+  const backgroundLocation = await requestBackgroundLocation();
+  const foregroundLocation = backgroundLocation
+    ? true
+    : (await Location.getForegroundPermissionsAsync()).status === 'granted';
+  const notifications      = await requestNotificationPermission();
 
   return { foregroundLocation, backgroundLocation, notifications };
 }
