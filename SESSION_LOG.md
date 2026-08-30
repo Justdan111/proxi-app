@@ -9,6 +9,53 @@ blockers, and intent — the things that are not recoverable from the diff.
 
 ---
 
+## 2026-08-30 — Re-audit of the merged codebase
+
+**Branch:** `audit/2026-08-30` → PR #8 (open, awaiting review)
+
+### What this was
+PR #7 merged, so `main` finally holds days 1–4 plus the review fixes. `AUDIT_REPORT.md`
+still described Expo SDK 54 and a codebase that no longer exists, so it was re-audited
+against the merged code rather than relabelled.
+
+Verified on `main` first: `tsc` clean, `expo-doctor` 21/21, lint 8 problems.
+
+### Six new findings, in §13
+Two matter before testers see a build:
+
+- **§13.1 — granting location permission outside the app never starts geofencing.** Day 3
+  correctly removed the startup *prompt* (Apple 5.1.5), but the permission **check**
+  inherited the same once-per-launch lifetime. Decline at first save, enable "Always" in
+  system settings later, and no reminder fires until the app restarts — with nothing in the
+  UI saying why. **Introduced by our own day-3 change.**
+- **§13.3 — the Activity tab never refreshes.** Latent for the whole project and invisible
+  until now: background activity logging had never executed (§3.2 read the JWT from the
+  wrong store), so nothing was arriving to be stale. Fixing §3.2 turned a dormant bug into
+  a visible one.
+
+Then §13.2 geofencing runs with zero reminders, §13.4 the search debounce is never
+cancelled, §13.5 four `console.log` calls ship (three still tagged `[v0]`), and §13.6
+separates the real lint error from the three that are a rule firing on correct Reanimated
+usage.
+
+### The pattern worth remembering
+Both P1s come from the same mechanism: **fixing one defect can expose or create another.**
+§13.1 was created by a correct compliance fix; §13.3 was revealed by a correct storage fix.
+Neither is reachable by `tsc` or lint, and three of the four real findings were only found
+by reading. That is the argument for the device pass, not another code read.
+
+### Document structure
+§§2–12 are kept as the original diagnostic record — `LAUNCH_PLAN.md` cites those numbers,
+so nothing was renumbered. §1 and the timeline were rewritten for current reality, and the
+Remaining Work section now carries a Code row pointing at §13.
+
+### Next action
+Unchanged and external: 12 Play testers, `DELETE /api/auth/me`, both enrollments, then
+`release/DEVICE_QA.md` on hardware. The §13 code fixes are small and can ride alongside;
+§13.1 and §13.3 should land before any tester build.
+
+---
+
 ## 2026-08-30 — Merge recovery, and a standing Remaining Work section
 
 **Branch:** `day4/release-prep` → PR #7 (open)
