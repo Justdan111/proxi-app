@@ -596,6 +596,23 @@ No credential leaks found.
 
 ## 12. Change Log Since 23 April 2026 Audit
 
+**Corrected on `day4/release-prep` (30 August 2026):**
+- **§4.6's framing was wrong.** It called for disclosing "precise background location
+  collection, server-side storage, and retention". Tracing every outbound call shows the
+  device's live position is never transmitted: `lib/location/geofencing.ts` compares
+  on-device, and `LogActivityPayload` carries the reminder's label, not a position. Only
+  the coordinates of user-saved places are sent, via `/api/reminders`. Precise Location is
+  still declared as collected on both store forms — saved places are coordinates tied to an
+  account — but the policy must not claim the app uploads the user's movements. See
+  `release/DATA_DISCLOSURES.md`.
+- §4.6 compliance package drafted in `release/`: privacy policy, both stores' disclosures,
+  listing copy, device QA checklist, release runbook. Unpublished and unsubmitted.
+- iOS privacy manifest checked: AsyncStorage and expo-file-system ship their own
+  `PrivacyInfo.xcprivacy`, and the app uses no required-reason API directly, so no
+  app-level `ios.privacyManifests` entry is needed.
+- **Newly noted:** `supportsTablet: true` obliges iPad screenshots and iPad layout review.
+  Not changed — it is a product decision.
+
 **Resolved on `day3/screen-consolidation-and-compliance` (30 August 2026):**
 - §7 — Explorer merged into Home. Detail modal, delete, and the stats row ported;
   the five "Coming soon" actions deleted rather than carried over. Three tabs, and the
