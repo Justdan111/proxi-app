@@ -8,6 +8,8 @@ import {
   Switch,
   Image,
   Alert,
+  AppState,
+  Linking,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -17,14 +19,18 @@ import Animated, {
   Easing,
   FadeInDown,
 } from 'react-native-reanimated';
-import { Moon, Sun, Bell, Info, LogOut, ChevronRight, User } from 'lucide-react-native';
+import { Moon, Sun, Bell, Info, LogOut, ChevronRight, User, Trash2 } from 'lucide-react-native';
 import { useTheme } from '@/context/themeContext';
 import { useAuth } from '@/context/authContext';
+import { checkPermissions, requestNotificationPermission } from '@/lib/location/permissions';
+import { ACCENT } from '@/lib/theme';
 
 export default function SettingsScreen() {
   const { isDark, toggleTheme } = useTheme();
-  const { logout, user } = useAuth();
-  const [notifications, setNotifications] = useState(true);
+  const { logout, deleteAccount, user } = useAuth();
+  // Mirrors the real OS permission rather than a local boolean that did nothing.
+  const [notifications, setNotifications] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -43,6 +49,83 @@ export default function SettingsScreen() {
       profileScale.value = withSpring(1, { damping: 12, stiffness: 100 });
     }, 200);
   }, []);
+
+  // Re-check on foreground: the user may have changed it in system settings.
+  useEffect(() => {
+    let mounted = true;
+
+    const sync = () => {
+      checkPermissions()
+        .then((status) => {
+          if (mounted) setNotifications(status.notifications);
+        })
+        .catch(() => {});
+    };
+
+    sync();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') sync();
+    });
+
+    return () => {
+      mounted = false;
+      sub.remove();
+    };
+  }, []);
+
+  const handleNotificationToggle = async (next: boolean) => {
+    if (next) {
+      const granted = await requestNotificationPermission();
+      setNotifications(granted);
+      if (!granted) {
+        // Already denied once — the OS will not prompt again.
+        Alert.alert(
+          'Notifications Are Off',
+          'Proxi cannot alert you at a saved location without notification permission. Enable it in Settings.',
+          [
+            { text: 'Not Now', style: 'cancel' },
+            { text: 'Open Settings', onPress: () => Linking.openSettings() },
+          ]
+        );
+      }
+      return;
+    }
+
+    // The OS owns this permission; an app cannot revoke its own.
+    Alert.alert(
+      'Turn Off Notifications',
+      'Notification permission is controlled by your device settings. Proxi cannot turn it off for you.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Open Settings', onPress: () => Linking.openSettings() },
+      ]
+    );
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This permanently deletes your account, every reminder you have saved, and your activity history. It cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            const ok = await deleteAccount();
+            setDeleting(false);
+            if (!ok) {
+              Alert.alert(
+                'Could Not Delete Account',
+                'Your account was not deleted. Please check your connection and try again.'
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const headerAnimatedStyle = useAnimatedStyle(() => ({
     opacity: headerOpacity.value,
@@ -91,7 +174,7 @@ export default function SettingsScreen() {
         <View className="px-6 pb-32">
           {/* Profile Section */}
           <Animated.View style={profileAnimatedStyle} className="mb-8">
-            <TouchableOpacity className="bg-card dark:bg-card-dark rounded-3xl p-5 border border-border dark:border-border-dark">
+            <View className="bg-card dark:bg-card-dark rounded-3xl p-5 border border-border dark:border-border-dark">
               <View className="flex-row items-center">
                 {/* Profile Image */}
                 <View className="w-16 h-16 rounded-full bg-accent/20 dark:bg-accent-dark/20 items-center justify-center mr-4">
@@ -115,9 +198,8 @@ export default function SettingsScreen() {
                   </Text>
                 </View>
 
-                <ChevronRight size={20} className="text-muted-foreground dark:text-muted-foreground-dark" />
               </View>
-            </TouchableOpacity>
+            </View>
           </Animated.View>
 
           {/* Appearance Section */}
@@ -148,7 +230,7 @@ export default function SettingsScreen() {
                 <Switch
                   value={isDark}
                   onValueChange={toggleTheme}
-                  trackColor={{ false: '#E5E7EB', true: '#00D4AA' }}
+                  trackColor={{ false: '#E5E7EB', true: ACCENT }}
                   thumbColor="#FFFFFF"
                   ios_backgroundColor="#E5E7EB"
                 />
@@ -173,14 +255,14 @@ export default function SettingsScreen() {
                       Location Alerts
                     </Text>
                     <Text className="text-sm text-muted-foreground dark:text-muted-foreground-dark">
-                      {notifications ? 'Enabled' : 'Disabled'}
+                      {notifications ? 'Enabled' : 'Disabled in system settings'}
                     </Text>
                   </View>
                 </View>
                 <Switch
                   value={notifications}
-                  onValueChange={setNotifications}
-                  trackColor={{ false: '#E5E7EB', true: '#00D4AA' }}
+                  onValueChange={(next) => { void handleNotificationToggle(next); }}
+                  trackColor={{ false: '#E5E7EB', true: ACCENT }}
                   thumbColor="#FFFFFF"
                   ios_backgroundColor="#E5E7EB"
                 />
@@ -233,6 +315,29 @@ export default function SettingsScreen() {
                   </Text>
                 </View>
                 <ChevronRight size={20} className="text-muted-foreground dark:text-muted-foreground-dark" />
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Delete Account */}
+          <Animated.View entering={FadeInDown.delay(700).springify()} className="mt-4">
+            <TouchableOpacity
+              onPress={handleDeleteAccount}
+              disabled={deleting}
+              className="bg-destructive/10 dark:bg-destructive-dark/10 rounded-3xl p-5 border border-destructive/20 dark:border-destructive-dark/20"
+            >
+              <View className="flex-row items-center">
+                <View className="bg-destructive/10 dark:bg-destructive-dark/10 rounded-2xl p-3 mr-4">
+                  <Trash2 size={20} className="text-destructive dark:text-destructive-dark" />
+                </View>
+                <View className="flex-1">
+                  <Text className="font-bold text-destructive dark:text-destructive-dark text-base mb-1">
+                    {deleting ? 'Deleting Account...' : 'Delete Account'}
+                  </Text>
+                  <Text className="text-sm text-muted-foreground dark:text-muted-foreground-dark">
+                    Permanently removes your account and all its data
+                  </Text>
+                </View>
               </View>
             </TouchableOpacity>
           </Animated.View>

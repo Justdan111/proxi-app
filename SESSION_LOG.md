@@ -9,6 +9,251 @@ blockers, and intent — the things that are not recoverable from the diff.
 
 ---
 
+## 2026-08-30 — Merge recovery, and a standing Remaining Work section
+
+**Branch:** `day4/release-prep` → PR #7 (open)
+
+### The stacked PRs did not land in main
+All six PRs reported as merged, but **only #2 reached `main`**. The other four merged into
+their base branches instead: #3 → day1, #4 → day2, #5 → day3, #6 → day4. GitHub retargets a
+stacked PR to `main` only once its base branch merges, and each was merged before that
+retarget happened — so every merge was individually correct and went *downward* into the
+branch below rather than up into `main`.
+
+Net effect: 19 commits — all of days 2, 3, 4 and the geofencing review fixes — were absent
+from `main` while appearing merged.
+
+**Lesson for any future stack:** a chain of PRs must be merged strictly bottom-up, waiting
+for each retarget before merging the next. That constraint was never stated when the stack
+was created; it should have been, in every PR description.
+
+The merges collapsed everything into `day4/release-prep`, which now contains all of it, so
+PR #7 (`day4/release-prep` → `main`) recovers the lot in one merge. Nothing in it is
+unreviewed — the same commits, moved to the right place.
+
+### Also in this branch
+`AUDIT_REPORT.md` gains a standing **Remaining Work** section between §1 and §2, so the
+next session does not have to re-derive status from the §12 change log. Deliberately
+unnumbered — `LAUNCH_PLAN.md` cites section numbers (§3.9, §4.8), so renumbering would
+break those references.
+
+It groups what is left by **who unblocks it**, which is the useful axis now that no
+in-scope code remains: blocked on someone else, needs an asset, needs a device, needs a
+console, and deferred by decision.
+
+### Next action
+Merge PR #7 into `main`. Then the four external actions in the new section — the backend
+endpoint, the device pass, the compliance package, and enrollment — with the 12 Play
+testers started first, because that clock runs whether or not anyone is working.
+
+---
+
+## 2026-08-30 — Self-review of the stack: three geofencing defects
+
+**Branch:** `fix/geofence-concurrency` → PR #6 (open, awaiting review)
+
+### Why this exists
+All four days were complete with nothing left to build, and this repo has no test suite —
+so typecheck and lint had passed on ~2,000 lines of logic that no one had read back.
+Reviewing day 2's own work found three defects, all in the geofencing path that day 2
+existed to fix.
+
+### Found and fixed
+1. **Concurrent runs could double-notify.** The two background tasks share a JS context and
+   can overlap. `checkProximity` read fence state, then awaited notification delivery plus
+   up to three network calls (completion PUT, toggle fallback, activity POST — 10s timeout
+   each) before writing it back. A second run entering that window saw "not yet notified"
+   and sent again. This defeated the exact guarantee §2.1 was written to provide, and it
+   would have shown up on a device as intermittent duplicates — the hardest kind to
+   attribute. Now serialised through a promise chain, with the notified mark persisted
+   before the network calls.
+2. **Fence state was never pruned.** Only enabled reminders are cached and only cached ones
+   are visited, so ids for deleted or disabled reminders were never removed. Unbounded
+   growth, and a real symptom: toggle a reminder off and on while inside its radius and it
+   stayed silent until you left and came back.
+3. **No per-reminder error isolation.** One throw aborted the pass and discarded occupancy
+   changes already computed for earlier reminders.
+
+Also renamed `useDistanceToReminder` → `distanceToReminder`; it stopped being a hook in
+day 3 and the prefix was a trap.
+
+`tsc` clean, lint unchanged at 8 problems.
+
+### Where this leaves the stack
+Five PRs, stacked: **#2 → #3 → #4 → #5 → #6.** Each based on the one before.
+
+### Note for whoever reviews
+Defect 1 is not reachable by reading `checkProximity` alone — it only appears when you
+notice both `TaskManager.defineTask` bodies call it and that there are awaited network
+calls between the read and the write. Worth the same scrutiny on any future background
+work.
+
+### Next action
+Unchanged and entirely external: 12 Play testers (the 14-day clock still has not started),
+`DELETE /api/auth/me`, and both store enrollments. Then `release/DEVICE_QA.md` on real
+hardware — also published as a tickable page for use in the field.
+
+---
+
+## 2026-08-30 — Day 4: release compliance package
+
+**Branch:** `day4/release-prep` → PR #5 (open, awaiting review)
+
+### What day 4 could and could not be
+Day 4 is the first day that is mostly **not** engineering. Of its four sections, one could
+be done from the repo:
+
+| Section | Status |
+|---|---|
+| §4.1 compliance package | **Done** — drafted in `release/` |
+| §4.2 physical-device QA | **Cannot be done from here.** Checklist written instead |
+| §4.3 production build | Cannot run — needs EAS credentials and a Maps key. Runbook written |
+| §4.4 store enrollment | Dan's, and outside the repo entirely |
+
+No source changed. `tsc` clean, lint 8 problems — both unchanged from day 3.
+
+### Completed
+`release/` contains: `RELEASE_RUNBOOK.md`, `DEVICE_QA.md`, `PRIVACY_POLICY.md`,
+`DATA_DISCLOSURES.md`, `STORE_LISTING.md`, and a README index. ~700 lines.
+
+### The finding that mattered
+**The device's live position never leaves the phone.** Traced every outbound call:
+geofencing compares on-device, and `LogActivityPayload` carries the reminder's label, not
+a position. The only coordinates transmitted are those of places the user deliberately
+saved, via `/api/reminders`.
+
+`AUDIT_REPORT.md` §4.6 had said the policy must disclose "precise background location
+collection, server-side storage" — that would have over-declared. Precise Location is still
+declared as collected on both forms, because saved places are coordinates tied to an
+account, but the framing is different and the reasoning is written down with its evidence
+in `DATA_DISCLOSURES.md` so it is not re-derived incorrectly at form-filling time.
+
+### Two things noticed while writing it up
+- **`supportsTablet` is `true`.** That obliges iPad screenshots and an app that looks right
+  on one. Flagged rather than changed — it is a product decision. Setting it false is a
+  one-line change that removes a whole review surface.
+- **`eas.json` `submit.production` is empty.** Fine for a manual first upload; needs the
+  Apple app ID and Play service-account key before `eas submit` runs unattended.
+
+### Blocked — unchanged, and now the entire critical path
+Days 1–3 were engineering with external blockers alongside. Day 4 **is** the blockers.
+- `DELETE /api/auth/me` still does not exist. iOS cannot be submitted. Ten days since the
+  plan said to escalate on day 1.
+- Neither store account enrolled.
+- **12 Play testers not recruited.** 12 × 14 continuous days, and the clock has not
+  started. This alone puts Play production access ~3 weeks out from whenever it does.
+- The `triggered` field question from day 2, still unanswered.
+- §2.6 alarm sound: still the 3.36s chime.
+
+### Next action
+**Nothing further can be built.** Four PRs are stacked and awaiting review; merge #2 → #3 →
+#4 → #5 in order. Then the three external items above, in the order given in
+`release/RELEASE_RUNBOOK.md` — testers and the backend endpoint first, because they are
+wall-clock and gate everything after them. Then `DEVICE_QA.md` on real hardware before any
+production build.
+
+---
+
+## 2026-08-30 — Day 3: screen consolidation, compliance, UI consistency
+
+**Branch:** `day3/screen-consolidation-and-compliance` → PR #4 (open, awaiting review)
+
+### Stacking, again
+Stacked on `day2/...`, for the same reason day 2 stacked on day 1: neither has merged, so
+`main` still has none of this. **Merge order is #2, #3, #4.** Each PR is based on the one
+before it, so each diff shows only its own day.
+
+### Completed
+All of §3.1–§3.7 except the part that needs the backend.
+- §3.1 Explorer merged into Home; three tabs; the FAB margin hack removed.
+- §3.2 dead welcome screen and its invalid route deleted; `as Href` casts gone.
+- §3.3 account deletion — client complete, **endpoint still missing**.
+- §3.4 401 handling, §3.5 location draft context, §3.6 UI consistency, §3.7 performance
+  and contextual permission prompts.
+- `tsc --noEmit` clean, `expo-doctor` 21/21, lint down from 16 problems to 8
+  (4 errors, 4 warnings) — all 8 pre-existing patterns, none introduced.
+- Net −265 lines across 26 files.
+
+### Decisions made
+| Decision | Chosen | Why |
+|---|---|---|
+| Accent colour | **#00D4AA** | It had the most existing uses (18 vs 9 vs 7), so unifying on it changed the fewest call sites. #00d4d4 was the Tailwind token, so classes and literals had been rendering different colours all along. |
+| Where the accent lives | Tailwind token **and** `lib/theme.ts` | RN props like `color=` cannot take a class. Two sources is unavoidable; the file documents that they must move together. |
+| Icon picker added | Yes — small row on add-reminder | Not in the plan. §3.5 names "the dropped selectedIcon" as a defect, but nothing anywhere could ever set an icon, so carrying it through the draft alone would have changed nothing. |
+| Permission prompts | Moved to first reminder save | §4.7. Declining does not block the save. |
+| Account teardown | Shared between logout and deletion | They had drifted; deletion needs strictly more cleanup than logout did. `@proxi_theme` deliberately survives — a device preference, not account data. |
+
+### Blocked
+- **`DELETE /api/auth/me` still does not exist.** The client is finished: the Settings row,
+  the confirmation, and the teardown all work, and the call will 404 until the endpoint
+  ships. iOS cannot be submitted without it. Ten days since the plan said to escalate.
+- The `triggered` field question from day 2 is unchanged and unanswered.
+- §2.6 alarm sound unchanged.
+- Store enrollment and the 12 Play testers: unchanged. The 14-day clock has not started.
+
+### Not verified
+Still no physical-device QA, now across three days of changes. Day 3 adds visual work —
+one accent in both themes, the rebuilt location-picker, the merged Home — none of which
+has been seen rendered.
+
+### Next action
+**Review and merge #2, #3, #4 in order.** Run `npx expo prebuild --clean` first and work
+through the day 1–3 acceptance lists on a physical device. Day 4 is `day4/release-prep`:
+compliance package, device QA, production build, store enrollment. Day 4 cannot complete
+without the backend endpoint and both store accounts.
+
+---
+
+## 2026-08-30 — Day 2: alarm channel, geofence correctness, haptics
+
+**Branch:** `day2/alarm-notifications-and-geofencing` → PR #3 (open, awaiting review)
+
+### Base branch deviation — read this first
+CLAUDE.md says branch each day off `main`. Day 2 is instead stacked on
+`day1/expo-57-upgrade`, because PR #2 has not merged and `main` therefore contains
+neither SDK 57 nor the §1.4 configuration that §2.4 and §2.8 build on. **PR #3 must merge
+after PR #2.** Once #2 lands, #3 rebases onto `main` cleanly.
+
+### Completed
+- §2.1 notification spam, §2.2 token/base-URL mismatch, §2.3 `once` completion sync,
+  §2.4 alarm channel, §2.5 iOS interruption level, §2.7 haptics, §2.8 remaining fixes.
+- `tsc --noEmit` clean, `expo-doctor` 21/21, lint unchanged at 16 problems.
+
+### Decisions made
+| Decision | Chosen | Why |
+|---|---|---|
+| Background API calls | Use `activitiesApi` / `remindersApi` directly | The plan proposed extracting a shared `getAuthToken()`. The existing axios client already reads SecureStore in its interceptor and resolves the base URL, so calling it achieves §2.2's stated goal with no new code. |
+| Geofence state shape | Two sets — `occupied` and `notified` | Occupancy alone loses the case where a fence is entered *outside* its timeframe: it would become occupied, never notify, and never re-transition. Splitting them means the alert is owed and fires when the window opens. |
+| `once` completion call | `update({ triggered, enabled: false })`, falling back to `toggle` | The badge reads the server's `triggered`. See the blocked item below — the backend may not accept the field. |
+
+### Blocked
+- **`triggered` may not be accepted by `PUT /api/reminders/:id`.** `UpdateReminderPayload`
+  was extended locally, but the backend is a separate service and this could not be
+  verified from here. If it rejects or ignores the field, the fallback still auto-disables
+  the reminder but the Completed badge stays hidden. **Needs a backend confirmation.**
+- **§2.6 alarm sound not done.** Still the original 3.36s stereo chime; §5.8 wants a
+  20–30s tone. Producing audio is outside what can be done in the repo.
+  **This is coupled to the channel id:** `proxi-alarm-v2` is created by this branch, and
+  Android freezes a channel's sound at creation. If the sound is replaced *after* any
+  device has installed a build containing v2, the channel must bump to v3. Land the sound
+  before this reaches testers, or plan the bump.
+- `DELETE /api/auth/me`, store enrollment, and the 12 Play testers are all unchanged from
+  the previous entry. The 14-day clock still has not started.
+
+### Not verified
+No physical-device QA, for day 1 or day 2. Everything in the Day 2 acceptance list is
+device work: one notification per fence entry, the channel confirmed in Android's
+per-channel settings, DND bypass with DND actually on, `timeSensitive` under a Focus mode,
+Done and Snooze on both platforms, snooze accuracy under Doze.
+
+### Next action
+**Wait for Dan's review of PR #2, then PR #3.** Merge #2 first. Before merging either,
+run `npx expo prebuild --clean` and exercise the Day 1 and Day 2 acceptance lists on a
+physical device. Day 3 is `day3/screen-consolidation-and-compliance`, and its §3.3 is
+blocked on the backend deletion endpoint.
+
+---
+
 ## 2026-08-30 — Day 1: SDK 57 upgrade completed and Mapbox removed
 
 **Branch:** `day1/expo-57-upgrade` → PR #2 (open, awaiting review)

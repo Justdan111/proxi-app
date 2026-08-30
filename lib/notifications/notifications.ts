@@ -1,5 +1,13 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { ACCENT } from '../theme';
+
+// ── Android channel ──────────────────────────────────
+// An Android channel's importance, sound, and vibration are frozen at creation.
+// Changing any of them requires a NEW id — existing installs keep the old settings
+// forever. Bump this constant (and the defaultChannel in app.json) when that happens.
+export const ALARM_CHANNEL_ID = 'proxi-alarm-v2';
+const LEGACY_ALARM_CHANNEL_ID = 'proxi-alarm';
 
 // ── Foreground behavior — show even when app is open ──
 Notifications.setNotificationHandler({
@@ -17,23 +25,26 @@ Notifications.setNotificationHandler({
 export async function setupNotificationChannel() {
   if (Platform.OS !== 'android') return;
 
-  // High-priority channel — alarm style, full screen
-  await Notifications.setNotificationChannelAsync('proxi-alarm', {
+  // High-priority channel — alarm style
+  await Notifications.setNotificationChannelAsync(ALARM_CHANNEL_ID, {
     name:                     'Proxi Location Alerts',
     description:              'Alarm-style alerts when you arrive at a saved location',
     importance:               Notifications.AndroidImportance.MAX,
     sound:                    'proxi_alert.wav',     // filename only, no path
     vibrationPattern:         [0, 500, 200, 500],   // wait, buzz, pause, buzz
-    lightColor:               '#6366f1',
+    lightColor:               ACCENT,
     lockscreenVisibility:     Notifications.AndroidNotificationVisibility.PUBLIC,
     bypassDnd:                true,   // ← breaks through Do Not Disturb
     enableLights:             true,
     enableVibrate:            true,
     showBadge:                true,
   });
+
+  // Drop the superseded channel so it stops appearing in Android's settings screen.
+  await Notifications.deleteNotificationChannelAsync(LEGACY_ALARM_CHANNEL_ID).catch(() => {});
 }
 
-// ── Request permissions (including Critical Alerts on iOS) ──
+// ── Request permissions ──────────────────────────────
 export async function requestNotificationPermission(): Promise<boolean> {
   const { status: existing } = await Notifications.getPermissionsAsync();
   if (existing === 'granted') return true;
@@ -43,7 +54,6 @@ export async function requestNotificationPermission(): Promise<boolean> {
       allowAlert:         true,
       allowBadge:         true,
       allowSound:         true,
-      allowCriticalAlerts: true,  // ← bypasses silent mode on iOS
       provideAppNotificationSettings: true,
     },
   });
@@ -65,49 +75,36 @@ export async function sendReminderNotification(data: ReminderNotificationData) {
     body:     `Don't forget: ${data.reminderTitle} · ${data.location}`,
     sound:    'proxi_alert.wav',
     priority: Notifications.AndroidNotificationPriority.MAX,
+    // Both platforms — this is what renders the Done and Snooze buttons.
+    categoryIdentifier: 'reminder',
     data: {
-      reminderId: data.reminderId,
-      type:       'reminder_trigger',
+      reminderId:    data.reminderId,
+      reminderTitle: data.reminderTitle,
+      location:      data.location,
+      icon:          data.icon,
+      type:          'reminder_trigger',
     },
 
     // Android specific
     ...(Platform.OS === 'android' && {
-      sticky:       false,
-      vibrate:      [0, 500, 200, 500],
-      color:        '#6366f1',
-      categoryIdentifier: 'reminder',
+      sticky:  false,
+      vibrate: [0, 500, 200, 500],
+      color:   ACCENT,
     }),
 
-    // iOS Critical Alert — plays sound even on silent mode
+    // iOS — timeSensitive breaks through Focus modes and needs no entitlement.
+    // 'critical' requires an Apple-granted entitlement the app does not have.
     ...(Platform.OS === 'ios' && {
-      interruptionLevel: 'critical',  // iOS 15+ — highest priority
+      interruptionLevel: 'timeSensitive' as const,
       relevanceScore:    1,
     }),
   };
 
   await Notifications.scheduleNotificationAsync({
     content: notificationContent,
-    trigger: null, // fire immediately
-  });
-}
-
-// ── Full-screen intent on Android (alarm style) ──────
-// This makes the notification take over the screen like an alarm
-export async function sendFullScreenReminderNotification(data: ReminderNotificationData) {
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title:    `${data.icon}  You're nearby!`,
-      body:     `Don't forget: ${data.reminderTitle}`,
-      sound:    'proxi_alert.wav',
-      priority: Notifications.AndroidNotificationPriority.MAX,
-      data: {
-        reminderId: data.reminderId,
-        type:       'reminder_trigger',
-        fullScreen: true,
-      },
-      sticky: true,  // stays until user dismisses
-    },
-    trigger: null,
+    // channelId belongs on the TRIGGER. Setting it on the content silently does
+    // nothing and the notification falls back to the default channel.
+    trigger: Platform.OS === 'android' ? { channelId: ALARM_CHANNEL_ID } : null,
   });
 }
 
@@ -141,12 +138,24 @@ export async function snoozeReminder(data: ReminderNotificationData, minutes = 1
       title: `${data.icon}  Snoozed Reminder`,
       body:  `Don't forget: ${data.reminderTitle}`,
       sound: 'proxi_alert.wav',
-      data:  { reminderId: data.reminderId },
+      categoryIdentifier: 'reminder',
+      data: {
+        reminderId:    data.reminderId,
+        reminderTitle: data.reminderTitle,
+        location:      data.location,
+        icon:          data.icon,
+        type:          'reminder_trigger',
+      },
+      ...(Platform.OS === 'ios' && {
+        interruptionLevel: 'timeSensitive' as const,
+        relevanceScore:    1,
+      }),
     },
     trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-      seconds: minutes * 60,
-      repeats: false,
+      type:      Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+      seconds:   minutes * 60,
+      repeats:   false,
+      channelId: ALARM_CHANNEL_ID,
     },
   });
 }

@@ -65,6 +65,89 @@ apply for production access.
 Enroll with Apple as an **individual**, not an organization. Organization
 enrollment requires a D-U-N-S number, which adds 1–2 weeks.
 
+## Remaining Work
+
+Status as of **30 August 2026**, after days 1–4 and the review-fix branch.
+
+**No in-scope code is outstanding.** Every defect in §3, §6, §7, §8 and §9 that was in
+scope for launch is fixed. What is left is one asset and a set of things this repository
+cannot do: a backend endpoint, two store accounts, a device, and three console forms.
+
+Numbered references point at the sections below, which hold the full diagnosis. §12 records
+what each day resolved.
+
+### Blocked on someone else — this is the critical path
+
+| § | Item | Why it blocks |
+|---|---|---|
+| **4.1** | `DELETE /api/auth/me` does not exist on the backend | **iOS cannot be submitted.** Apple 5.1.1(v). The client is complete — the Settings row, the confirmation and the teardown all work — and 404s until the endpoint ships |
+| **3.3** | Unconfirmed: does `PUT /api/reminders/:id` accept `triggered`? | If it does not, `once` reminders still auto-disable through the `toggle` fallback, but the Completed badge never appears. Verified by device check 2.4c: reinstall, sign in, and see whether completion survived |
+| **11.9** | Neither store account is enrolled | Enrol with Apple as an **individual** — organization enrolment needs a D-U-N-S number and adds one to two weeks |
+| — | **12 Google Play testers are not recruited** | 12 testers × 14 **continuous** days of closed testing before a new personal account gets production access. Pure wall-clock, not work. The clock has not started, and this single item sets the Play date regardless of engineering. Aim for 15 — dropping below 12 restarts it |
+
+### Needs an asset
+
+| § | Item |
+|---|---|
+| **5.8** | The alert sound is still the original 3.36s stereo chime. Needs a 20–30s alarm tone (iOS caps custom sounds at 30s; export mono to halve the file at no perceptible cost) |
+
+**This is coupled to the Android channel ID.** A channel's sound is frozen at creation, so
+if the new sound lands *after* a build containing `proxi-alarm-v2` has reached any device,
+the channel must bump to `v3` (one constant, `ALARM_CHANNEL_ID`, plus `defaultChannel` in
+`app.json`). Land the sound before testers get a build, or plan the bump.
+
+### Needs a physical device — §11.1, §11.5, §11.6, §11.8
+
+**Nothing across the four days has been run on hardware.** This is the whole verification
+surface, and it cannot be reduced: background geofencing and notification delivery are not
+testable in a simulator, which will happily show a notification appearing and tell you
+nothing about which channel carried it.
+
+`release/DEVICE_QA.md` is the pass — 63 checks, ordered so a failure identifies the change
+that caused it. Run `npx expo prebuild --clean` first; the local `android/` directory is
+gitignored but stale, and still carries permissions day 1 removed.
+
+The four highest-value checks:
+
+- **§3.9** — the alarm channel confirmed in Android's per-channel settings, at MAX
+  importance, with Do Not Disturb actually enabled. None of this has ever applied
+- **§3.1** — stay inside a fence for 10+ minutes and get no repeats. This is also the check
+  that would expose the concurrency race fixed on `fix/geofence-concurrency`
+- **§5.3** — the radius circle matches the configured metres against real streets
+- **§11.8** — the geofence fires with the app terminated, and again after a device reboot
+
+### Needs a console or a published URL
+
+| § | Item |
+|---|---|
+| **4.6** | Publish the privacy policy at a public URL; complete the App Store privacy labels and the Play Data Safety form; capture screenshots; enter the listing copy. All **drafted** in `release/`, none submitted. The two forms must agree with each other and with the app — a mismatch is its own rejection reason |
+| **10** | **Restrict the Android Google Maps key** to the package name and release SHA-1 in Google Cloud Console. Mandatory, not optional: it ships inside a public binary and an unrestricted key is billable by anyone who extracts it |
+| **4.8** | Confirm the target-API warning is absent when the build is uploaded to Play Console |
+| — | Decide `supportsTablet`, currently `true`. It obliges iPad screenshots and an app that looks right on one; setting it false is a one-line change that removes an entire review surface |
+
+### Deferred by decision — not gaps
+
+Each was considered and consciously left out of the launch scope. Do not treat these as
+unfinished work.
+
+- **§5.5** Android full-screen intent and iOS AlarmKit. A true full-screen alarm takeover is
+  impossible for a third-party iOS app at any price — never promise it
+- **§6.2** renaming the `(tab)` route group to `(tabs)` — cosmetic
+- **§9.3** overnight timeframes (a 22:00→06:00 window is still rejected)
+- **§9.4** `toggled` events crowding the Activity feed
+- Google Places autocomplete — the `GeocodingProvider` interface is ready for it, and
+  device check 1.7 is what decides whether the native geocoder is good enough
+- `lucide-react-native` 0.x → 1.x; reminder edit, duplicate, share and archive
+- Deleting or restoring the archived `lib/simulation/` directory
+
+### Against the Go-Live Criteria (§11)
+
+Criteria **3, 4 and 5** are met in code, and every P0 in §3 is fixed but **not yet verified
+on a device**, which criterion 1 requires. The remaining five reduce to four actions: get
+the backend endpoint, run the device pass, publish the compliance package, and enrol.
+
+---
+
 ## 2. What Is Already Done
 
 ### 2.1 Architecture
@@ -595,6 +678,101 @@ No credential leaks found.
 9. Apple Developer Program and Google Play Console accounts active.
 
 ## 12. Change Log Since 23 April 2026 Audit
+
+**Found reviewing day 2's own work, fixed on `fix/geofence-concurrency` (30 August 2026):**
+- **§3.1's fix had a race.** `GEOFENCE_TASK` and `BG_FETCH_TASK` share one JS context and
+  can overlap. A check read the fence state, then awaited notification delivery plus up to
+  three network calls before writing it back — so a second run could observe "not yet
+  notified" and send a duplicate. Checks are now serialised; the notified mark is persisted
+  before the network calls rather than after.
+- **Fence state was never pruned.** `cacheRemindersForBackground` caches only enabled
+  reminders and the loop visits only cached ones, so ids for deleted or disabled reminders
+  were never removed. Unbounded growth, plus a visible symptom: toggling a reminder off and
+  on while inside its radius left it in the notified set and it stayed silent until the
+  user left and returned.
+- **No per-reminder error isolation.** A throw inside the loop skipped every remaining
+  reminder and discarded occupancy changes already computed.
+- `useDistanceToReminder` renamed — it stopped being a hook when §9.1's per-card GPS
+  fallback was removed, and the `use*` prefix on a function with an early return is a trap.
+
+**Corrected on `day4/release-prep` (30 August 2026):**
+- **§4.6's framing was wrong.** It called for disclosing "precise background location
+  collection, server-side storage, and retention". Tracing every outbound call shows the
+  device's live position is never transmitted: `lib/location/geofencing.ts` compares
+  on-device, and `LogActivityPayload` carries the reminder's label, not a position. Only
+  the coordinates of user-saved places are sent, via `/api/reminders`. Precise Location is
+  still declared as collected on both store forms — saved places are coordinates tied to an
+  account — but the policy must not claim the app uploads the user's movements. See
+  `release/DATA_DISCLOSURES.md`.
+- §4.6 compliance package drafted in `release/`: privacy policy, both stores' disclosures,
+  listing copy, device QA checklist, release runbook. Unpublished and unsubmitted.
+- iOS privacy manifest checked: AsyncStorage and expo-file-system ship their own
+  `PrivacyInfo.xcprivacy`, and the app uses no required-reason API directly, so no
+  app-level `ios.privacyManifests` entry is needed.
+- **Newly noted:** `supportsTablet: true` obliges iPad screenshots and iPad layout review.
+  Not changed — it is a product decision.
+
+**Resolved on `day3/screen-consolidation-and-compliance` (30 August 2026):**
+- §7 — Explorer merged into Home. Detail modal, delete, and the stats row ported;
+  the five "Coming soon" actions deleted rather than carried over. Three tabs, and the
+  tab-bar margin hack that dodged the FAB is gone.
+- §6.1 — `WelcomeScreen` and `app/(auth)/index.tsx` deleted. The `as Href` casts that hid
+  the invalid `'/(auth)/index'` route are gone, so both auth routes now typecheck.
+- §4.1 — account deletion implemented client-side: `authApi.deleteAccount`, a Settings row
+  behind an explicit confirmation, and shared teardown. **Still blocked on the backend.**
+- §3.6 — a 401 from any request now clears auth state via a handler registered on the
+  client, instead of deleting the token and leaving the user stranded.
+- §3.7 — the picker hands its result over through `LocationDraftProvider` instead of
+  `router.back()` + `router.setParams()`. The icon defect is fixed at its root: nothing
+  anywhere could set an icon, so an icon picker was added.
+- §8.1 — one accent (#00D4AA). `lib/theme.ts` holds the value for props that need a real
+  colour string; the Tailwind token holds it for classes.
+- §8.2 — `location-picker` converted to NativeWind; its two hand-rolled palettes deleted.
+- §8.3 — `fontFamily: 'Courier'` removed. §8.4 — the inert notifications switch now
+  reflects real OS permission; the profile row's chevron-without-destination is gone.
+- §8.5 — the fixed 2-second splash delay removed.
+- §9.1 — cards no longer each call `getCurrentPositionAsync`; distance comes from the one
+  watch the screen owns. §9.2 — the doubled foreground permission prompt fixed.
+- §4.7 — permissions are no longer requested at launch. Startup only checks; the prompt
+  moves to the first reminder save, with an explanation.
+
+**Still open after day 3:**
+- §4.1 — `DELETE /api/auth/me` does not exist. The client is complete and will 404.
+- §5.8 / §2.6 — the alarm sound is still the 3.36s chime.
+- §9.3 overnight timeframes, §9.4 activity feed noise, §6.2 `(tab)` naming — all
+  explicitly out of scope for launch.
+
+**Resolved on `day2/alarm-notifications-and-geofencing` (30 August 2026):**
+- **§3.9 — the alarm channel now actually applies.** `channelId` moved to the trigger on
+  both senders; the channel id is a constant and bumped to `proxi-alarm-v2`, with the
+  superseded channel deleted.
+- §3.1 — notification spam fixed. Occupancy tracking with a `radius x 1.15` exit ring;
+  notifies only on the outside-to-inside transition.
+- §3.2 — background activity logging now goes through the shared API client, so it reads
+  the JWT from SecureStore rather than AsyncStorage and resolves the base URL correctly.
+- §3.3 — `once` completion persists to the server (`triggered` and `enabled`), with a
+  toggle fallback, plus a foreground re-fetch so the badge is not stale.
+- §3.4 — `categoryIdentifier` moved out of the Android-only spread, so Done and Snooze
+  render on iOS.
+- §3.5 — the Done action performs a real mutation instead of a `console.log`.
+- §3.8 — dead `cachedReminders` write removed.
+- §3.10 — `sendFullScreenReminderNotification` deleted.
+- §3.12 / §5.6 — iOS drops to `interruptionLevel: 'timeSensitive'`; `allowCriticalAlerts`
+  removed from the permission request.
+- §9.5 — unused `lib/config.ts` deleted.
+- §9.6 — `expo-haptics` wired through a `lib/haptics.ts` wrapper.
+- **Latent bug found while fixing §3.9:** the notification payload carried only
+  `reminderId`, but the response listener destructures `reminderTitle`, `location`, and
+  `icon` from it — so snoozing produced a notification with `undefined` fields. All four
+  are now written.
+
+**Still open after day 2:**
+- §5.8 — the alert sound is still the 3.36s stereo chime. A 20–30s alarm tone is an
+  audio asset that has to be produced outside this repo. **This blocks the channel id:**
+  replacing the sound after `proxi-alarm-v2` exists on a device requires a `v3` bump,
+  because Android freezes a channel's sound at creation.
+- §3.11 — `SCHEDULE_EXACT_ALARM` is declared and snooze passes the channel, but the
+  under-Doze timing check is physical-device work.
 
 **Resolved on `day1/expo-57-upgrade` (30 August 2026):**
 - Expo SDK 54 → 57, React Native 0.81.5 → 0.86.3; Android now targets API 36 via

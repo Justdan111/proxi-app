@@ -89,11 +89,11 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#6366f1",
+          "color": "#00D4AA",
           "sounds": [
             "./assets/sounds/proxi_alert.wav"
           ],
-          "defaultChannel": "proxi-alarm"
+          "defaultChannel": "proxi-alarm-v2"
         }
       ]
     ],

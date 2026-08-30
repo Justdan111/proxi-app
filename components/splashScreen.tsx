@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View, Text, Animated } from 'react-native';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
+import { ACCENT } from '@/lib/theme';
 
 export default function SplashScreen() {
   const fadeAnim = new Animated.Value(0);
@@ -33,8 +34,8 @@ export default function SplashScreen() {
           <Svg width={200} height={200} viewBox="0 0 200 200">
             <Defs>
               <RadialGradient id="dotGradient" cx="50%" cy="50%" r="50%">
-                <Stop offset="0%" stopColor="#00d4d4" stopOpacity="0.8" />
-                <Stop offset="100%" stopColor="#00d4d4" stopOpacity="0.2" />
+                <Stop offset="0%" stopColor={ACCENT} stopOpacity="0.8" />
+                <Stop offset="100%" stopColor={ACCENT} stopOpacity="0.2" />
               </RadialGradient>
             </Defs>
             <Circle cx="100" cy="100" r="80" fill="none" stroke="#3a3a3a" strokeWidth="1" />
@@ -50,7 +51,7 @@ export default function SplashScreen() {
                   cx={x}
                   cy={y}
                   r="1.5"
-                  fill="#00d4d4"
+                  fill={ACCENT}
                   opacity={opacity}
                 />
               );

@@ -39,6 +39,10 @@ export interface CreateReminderPayload {
 }
 
 export interface UpdateReminderPayload {
+  // Set when a `once` reminder fires: the server owns completion state so it
+  // survives a reinstall and syncs across devices.
+  triggered?: boolean;
+  enabled?: boolean;
   title?: string;
   location?: string;
   address?: string;

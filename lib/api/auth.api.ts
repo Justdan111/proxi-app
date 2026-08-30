@@ -71,6 +71,12 @@ export const authApi = {
     return data.data;
   },
 
+  // Required by Apple guideline 5.1.1(v). The endpoint must delete the account
+  // and everything it owns, not deactivate it.
+  deleteAccount: async (): Promise<void> => {
+    await apiClient.delete('/api/auth/me');
+  },
+
   // Token helpers
   saveToken: (token: string) =>
     SecureStore.setItemAsync(TOKEN_KEY, token),

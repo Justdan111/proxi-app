@@ -59,6 +59,14 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Registered by authContext on mount. Without it a 401 cleared the token but
+// left the user sitting on a screen whose data would never load.
+let onUnauthorized: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  onUnauthorized = handler;
+}
+
 // ── Response interceptor: handle 401 globally ──
 apiClient.interceptors.response.use(
   (response) => response,
@@ -66,6 +74,7 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401) {
       // Token expired — clear storage, app will redirect to login
       await SecureStore.deleteItemAsync(TOKEN_KEY);
+      onUnauthorized?.();
     }
     return Promise.reject(error);
   }
