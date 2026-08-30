@@ -1,8 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { router } from 'expo-router';
 import { AxiosError } from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authApi, User } from '@/lib/api';
+import { setUnauthorizedHandler } from '@/lib/api/client';
 import { getApiError } from '@/lib/api/errors';
+import { stopGeofencing } from '@/lib/location/geofencing';
 
 interface AuthContextType {
   user: User | null;
@@ -12,6 +15,7 @@ interface AuthContextType {
   signup: (name: string, email: string, password: string) => Promise<void>;
   forgotPassword: (email: string) => Promise<boolean>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<boolean>;
   error: string | null;
   clearError: () => void;
 }
@@ -22,6 +26,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser]         = useState<User | null>(null);
   const [isLoading, setLoading] = useState(true); // true on mount while checking token
   const [error, setError]       = useState<string | null>(null);
+
+  // Everything account-scoped, wiped in one place so logout and deletion
+  // cannot drift apart. The theme lives under '@proxi_theme' and is a device
+  // preference, not account data, so it deliberately survives.
+  const clearLocalSession = async () => {
+    await authApi.clearToken();
+    await authApi.clearUser();
+    try {
+      const keys = await AsyncStorage.getAllKeys();
+      const owned = keys.filter(k => k.startsWith('proxi_'));
+      if (owned.length) await AsyncStorage.multiRemove(owned);
+    } catch {
+      // Non-critical — the token is already gone, so the session is over.
+    }
+    await stopGeofencing().catch(() => {});
+  };
+
+  // A 401 from any request means the session is over. Clearing the user is
+  // enough to route: RootNavigator redirects on !isAuthenticated.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      void authApi.clearUser();
+      setUser(null);
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   // On app start — check if a valid token exists and fetch user profile
  useEffect(() => {
@@ -110,11 +140,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Ignore logout API errors — always clear locally
     } finally {
-      await authApi.clearToken();
-      await authApi.clearUser();
+      await clearLocalSession();
       setUser(null);
       router.replace('/(auth)/login');
     }
+  };
+
+  // Apple guideline 5.1.1(v). Unlike logout, this only tears down locally once
+  // the server confirms the account is gone — a failed delete must not look
+  // like it succeeded.
+  const deleteAccount = async (): Promise<boolean> => {
+    setError(null);
+    try {
+      await authApi.deleteAccount();
+    } catch (err) {
+      setError(getApiError(err));
+      return false;
+    }
+
+    await clearLocalSession();
+    setUser(null);
+    router.replace('/(auth)/login');
+    return true;
   };
 
   return (
@@ -126,6 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signup,
       forgotPassword,
       logout,
+      deleteAccount,
       error,
       clearError: () => setError(null),
     }}>
