@@ -9,6 +9,45 @@ blockers, and intent — the things that are not recoverable from the diff.
 
 ---
 
+## 2026-08-30 — Merge recovery, and a standing Remaining Work section
+
+**Branch:** `day4/release-prep` → PR #7 (open)
+
+### The stacked PRs did not land in main
+All six PRs reported as merged, but **only #2 reached `main`**. The other four merged into
+their base branches instead: #3 → day1, #4 → day2, #5 → day3, #6 → day4. GitHub retargets a
+stacked PR to `main` only once its base branch merges, and each was merged before that
+retarget happened — so every merge was individually correct and went *downward* into the
+branch below rather than up into `main`.
+
+Net effect: 19 commits — all of days 2, 3, 4 and the geofencing review fixes — were absent
+from `main` while appearing merged.
+
+**Lesson for any future stack:** a chain of PRs must be merged strictly bottom-up, waiting
+for each retarget before merging the next. That constraint was never stated when the stack
+was created; it should have been, in every PR description.
+
+The merges collapsed everything into `day4/release-prep`, which now contains all of it, so
+PR #7 (`day4/release-prep` → `main`) recovers the lot in one merge. Nothing in it is
+unreviewed — the same commits, moved to the right place.
+
+### Also in this branch
+`AUDIT_REPORT.md` gains a standing **Remaining Work** section between §1 and §2, so the
+next session does not have to re-derive status from the §12 change log. Deliberately
+unnumbered — `LAUNCH_PLAN.md` cites section numbers (§3.9, §4.8), so renumbering would
+break those references.
+
+It groups what is left by **who unblocks it**, which is the useful axis now that no
+in-scope code remains: blocked on someone else, needs an asset, needs a device, needs a
+console, and deferred by decision.
+
+### Next action
+Merge PR #7 into `main`. Then the four external actions in the new section — the backend
+endpoint, the device pass, the compliance package, and enrollment — with the 12 Play
+testers started first, because that clock runs whether or not anyone is working.
+
+---
+
 ## 2026-08-30 — Self-review of the stack: three geofencing defects
 
 **Branch:** `fix/geofence-concurrency` → PR #6 (open, awaiting review)
