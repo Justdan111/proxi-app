@@ -15,11 +15,8 @@
         "NSLocationWhenInUseUsageDescription": "Proxi uses your location to show nearby reminders.",
         "UIBackgroundModes": [
           "location",
-          "fetch",
-          "location",
           "fetch"
         ],
-        "UNAuthorizationOptionCriticalAlert": true,
         "ITSAppUsesNonExemptEncryption": false
       },
       "bundleIdentifier": "com.danemmanuel.proxi"
@@ -38,7 +35,7 @@
         "ACCESS_BACKGROUND_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
-        "USE_FULL_SCREEN_INTENT",
+        "SCHEDULE_EXACT_ALARM",
         "WAKE_LOCK",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION"
@@ -95,11 +92,9 @@
           "color": "#6366f1",
           "sounds": [
             "./assets/sounds/proxi_alert.wav"
-          ]
+          ],
+          "defaultChannel": "proxi-alarm"
         }
-      ],
-      [
-        "@rnmapbox/maps"
       ]
     ],
     "experiments": {
