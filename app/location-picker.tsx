@@ -10,20 +10,12 @@ import { X, Search, MapPin } from 'lucide-react-native';
 import { useTheme } from '@/context/themeContext';
 import ReminderMap from '@/components/maps/ReminderMap';
 import { Coordinates } from '@/lib/location/distance';
-
-const MAPBOX_TOKEN = process.env.EXPO_PUBLIC_MAPBOX_TOKEN!;
-
-interface MapboxFeature {
-  id:         string;
-  place_name: string;
-  text:       string;
-  center:     [number, number];
-}
+import { geocoder, PlaceResult } from '@/lib/location/geocoding';
 
 export default function LocationPickerScreen() {
   const { isDark } = useTheme();
   const [query,        setQuery]        = useState('');
-  const [results,      setResults]      = useState<MapboxFeature[]>([]);
+  const [results,      setResults]      = useState<PlaceResult[]>([]);
   const [searching,    setSearching]    = useState(false);
   const [selected,     setSelected]     = useState<Coordinates | null>(null);
   const [address,      setAddress]      = useState('');
@@ -52,13 +44,10 @@ export default function LocationPickerScreen() {
       setSelected(coords);
 
       try {
-        const url  = `https://api.mapbox.com/geocoding/v5/mapbox.places/${coords.longitude},${coords.latitude}.json?access_token=${MAPBOX_TOKEN}&limit=1`;
-        const res  = await fetch(url);
-        const json = await res.json();
-        const feature = json.features?.[0];
-        if (feature) {
-          setLocationName(feature.text);
-          setAddress(feature.place_name);
+        const place = await geocoder.reverse(coords);
+        if (place) {
+          setLocationName(place.name);
+          setAddress(place.address);
         }
       } catch {}
 
@@ -71,10 +60,7 @@ export default function LocationPickerScreen() {
       if (text.length < 2) { setResults([]); return; }
       setSearching(true);
       try {
-        const url  = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(text)}.json?access_token=${MAPBOX_TOKEN}&autocomplete=true&limit=5&language=en`;
-        const res  = await fetch(url);
-        const json = await res.json();
-        setResults(json.features ?? []);
+        setResults(await geocoder.search(text));
       } catch {
         setResults([]);
       } finally {
@@ -89,12 +75,11 @@ export default function LocationPickerScreen() {
     searchPlaces(text);
   };
 
-  const selectPlace = (feature: MapboxFeature) => {
-    const [lng, lat] = feature.center;
-    setSelected({ latitude: lat, longitude: lng });
-    setLocationName(feature.text);
-    setAddress(feature.place_name);
-    setQuery(feature.text);
+  const selectPlace = (place: PlaceResult) => {
+    setSelected(place.coordinates);
+    setLocationName(place.name);
+    setAddress(place.address);
+    setQuery(place.name);
     setResults([]);
   };
 
@@ -102,14 +87,11 @@ export default function LocationPickerScreen() {
     setSelected(coords);
     setResults([]);
     try {
-      const url  = `https://api.mapbox.com/geocoding/v5/mapbox.places/${coords.longitude},${coords.latitude}.json?access_token=${MAPBOX_TOKEN}&limit=1`;
-      const res  = await fetch(url);
-      const json = await res.json();
-      const feature = json.features?.[0];
-      if (feature) {
-        setLocationName(feature.text);
-        setAddress(feature.place_name);
-        setQuery(feature.text);
+      const place = await geocoder.reverse(coords);
+      if (place) {
+        setLocationName(place.name);
+        setAddress(place.address);
+        setQuery(place.name);
       }
     } catch {
       setLocationName('Selected Location');
@@ -182,9 +164,9 @@ export default function LocationPickerScreen() {
                   <MapPin size={14} color={c.accent} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.resultMain, { color: c.text }]}>{item.text}</Text>
+                  <Text style={[styles.resultMain, { color: c.text }]}>{item.name}</Text>
                   <Text style={[styles.resultSub,  { color: c.muted }]} numberOfLines={1}>
-                    {item.place_name}
+                    {item.address}
                   </Text>
                 </View>
               </TouchableOpacity>
