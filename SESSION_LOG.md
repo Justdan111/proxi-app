@@ -13,9 +13,6 @@ blockers, and intent — the things that are not recoverable from the diff.
 
 **Branch:** `fix/alarm-sound` → PR #10 (open, awaiting review)
 
-*Branched off `main`, so this entry sits above the re-audit rather than above the geocoding
-work in PR #9 — that branch is not merged yet and its entry is not on `main`.*
-
 ### The filename in §5.8 was wrong
 Dan referred to `assets/sounds/proxi-alert.wav`. That file does not exist — he was quoting
 the audit, which still carried the pre-rename name. The real file is `proxi_alert.wav` with
@@ -54,6 +51,63 @@ already requires.
 Unchanged and external: 12 Play testers, `DELETE /api/auth/me`, both enrollments. The two
 P1s from the re-audit — §13.1 and §13.3 — are still open and should land before any tester
 build.
+
+---
+
+## 2026-08-30 — Geocoding request volume, ahead of the first iOS test
+
+**Branch:** `fix/geocoding-request-volume` → PR #9 (open, awaiting review)
+
+### Why
+Dan asked whether Apple Maps covers everything the app needs before testing on iOS. The map
+does — `region`, `onPress`, `showsUserLocation`, custom `<Marker>` and metre-based
+`<Circle>` are all MapKit-supported, and `provider` is already left `undefined` on iOS, so
+no key and no change. `showsMyLocationButton` and `toolbarEnabled` are inert on iOS but both
+only switch off Google Maps UI, so nothing is lost.
+
+Place search is a different subsystem — `expo-location`'s `geocodeAsync`, which is
+CLGeocoder on iOS — and checking it turned up a defect worth fixing **before** the first
+test rather than after.
+
+### Found and fixed (§13.7, new)
+`search()` reverse-geocoded every result to label it: up to five extra calls, issued
+**concurrently** via `Promise.all`, on top of the forward call. Six requests per debounced
+keystroke burst, against a geocoder Expo's own docs say will error under too many
+concurrent requests.
+
+The reason to fix it first is the failure mode, not the volume: **throttled search is
+indistinguishable from a geocoder with poor coverage.** Left alone, the first iOS test would
+have measured our own request pattern and been read as a verdict on Apple's data — and that
+judgement is exactly what decides whether Google Places (§5.2) stops being a fast-follow.
+
+Now two sequential calls: the top hit is reverse-geocoded for its label, the rest carry the
+query and are named properly when selected — one call on a deliberate action rather than
+five per keystroke.
+
+### Also fixed: §13.4
+Same function, so it went in together. The debounce is built once in an effect, held in a
+ref, cancelled on unmount, with a closure guard on every `setState` after an `await`.
+
+I introduced a lint error on the first attempt — reading a ref inside `useMemo` counts as
+render-time access — and restructured rather than leaving it. `location-picker.tsx` is now
+entirely lint-clean; project lint is **6 problems (3 errors, 3 warnings)**, down from 8, and
+everything left is in §13.6's accepted category.
+
+### Testing note for the next session
+The iOS Simulator renders Apple Maps, so device-QA checks 1.4–1.7 (map render, radius
+accuracy at 100m vs 1km, tap-to-select, search coverage) can be done **without hardware**.
+Background geofencing, notification channels, DND and reboot behaviour still cannot.
+`npx expo prebuild --clean` then `npx expo run:ios`; Xcode → Features → Location to move in
+and out of a radius.
+
+### Still open from §13
+§13.1 and §13.3 are the two P1s and are untouched — both should land before any tester
+build. §13.2 and §13.5 remain P2.
+
+### Next action
+Unchanged and external: 12 Play testers, `DELETE /api/auth/me`, both enrollments. Then the
+iOS map/search pass in the Simulator, which now measures Apple's coverage rather than our
+request volume.
 
 ---
 
