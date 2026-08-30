@@ -9,6 +9,65 @@ blockers, and intent — the things that are not recoverable from the diff.
 
 ---
 
+## 2026-08-30 — Day 4: release compliance package
+
+**Branch:** `day4/release-prep` → PR #5 (open, awaiting review)
+
+### What day 4 could and could not be
+Day 4 is the first day that is mostly **not** engineering. Of its four sections, one could
+be done from the repo:
+
+| Section | Status |
+|---|---|
+| §4.1 compliance package | **Done** — drafted in `release/` |
+| §4.2 physical-device QA | **Cannot be done from here.** Checklist written instead |
+| §4.3 production build | Cannot run — needs EAS credentials and a Maps key. Runbook written |
+| §4.4 store enrollment | Dan's, and outside the repo entirely |
+
+No source changed. `tsc` clean, lint 8 problems — both unchanged from day 3.
+
+### Completed
+`release/` contains: `RELEASE_RUNBOOK.md`, `DEVICE_QA.md`, `PRIVACY_POLICY.md`,
+`DATA_DISCLOSURES.md`, `STORE_LISTING.md`, and a README index. ~700 lines.
+
+### The finding that mattered
+**The device's live position never leaves the phone.** Traced every outbound call:
+geofencing compares on-device, and `LogActivityPayload` carries the reminder's label, not
+a position. The only coordinates transmitted are those of places the user deliberately
+saved, via `/api/reminders`.
+
+`AUDIT_REPORT.md` §4.6 had said the policy must disclose "precise background location
+collection, server-side storage" — that would have over-declared. Precise Location is still
+declared as collected on both forms, because saved places are coordinates tied to an
+account, but the framing is different and the reasoning is written down with its evidence
+in `DATA_DISCLOSURES.md` so it is not re-derived incorrectly at form-filling time.
+
+### Two things noticed while writing it up
+- **`supportsTablet` is `true`.** That obliges iPad screenshots and an app that looks right
+  on one. Flagged rather than changed — it is a product decision. Setting it false is a
+  one-line change that removes a whole review surface.
+- **`eas.json` `submit.production` is empty.** Fine for a manual first upload; needs the
+  Apple app ID and Play service-account key before `eas submit` runs unattended.
+
+### Blocked — unchanged, and now the entire critical path
+Days 1–3 were engineering with external blockers alongside. Day 4 **is** the blockers.
+- `DELETE /api/auth/me` still does not exist. iOS cannot be submitted. Ten days since the
+  plan said to escalate on day 1.
+- Neither store account enrolled.
+- **12 Play testers not recruited.** 12 × 14 continuous days, and the clock has not
+  started. This alone puts Play production access ~3 weeks out from whenever it does.
+- The `triggered` field question from day 2, still unanswered.
+- §2.6 alarm sound: still the 3.36s chime.
+
+### Next action
+**Nothing further can be built.** Four PRs are stacked and awaiting review; merge #2 → #3 →
+#4 → #5 in order. Then the three external items above, in the order given in
+`release/RELEASE_RUNBOOK.md` — testers and the backend endpoint first, because they are
+wall-clock and gate everything after them. Then `DEVICE_QA.md` on real hardware before any
+production build.
+
+---
+
 ## 2026-08-30 — Day 3: screen consolidation, compliance, UI consistency
 
 **Branch:** `day3/screen-consolidation-and-compliance` → PR #4 (open, awaiting review)
