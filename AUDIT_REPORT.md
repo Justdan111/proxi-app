@@ -596,6 +596,36 @@ No credential leaks found.
 
 ## 12. Change Log Since 23 April 2026 Audit
 
+**Resolved on `day3/screen-consolidation-and-compliance` (30 August 2026):**
+- §7 — Explorer merged into Home. Detail modal, delete, and the stats row ported;
+  the five "Coming soon" actions deleted rather than carried over. Three tabs, and the
+  tab-bar margin hack that dodged the FAB is gone.
+- §6.1 — `WelcomeScreen` and `app/(auth)/index.tsx` deleted. The `as Href` casts that hid
+  the invalid `'/(auth)/index'` route are gone, so both auth routes now typecheck.
+- §4.1 — account deletion implemented client-side: `authApi.deleteAccount`, a Settings row
+  behind an explicit confirmation, and shared teardown. **Still blocked on the backend.**
+- §3.6 — a 401 from any request now clears auth state via a handler registered on the
+  client, instead of deleting the token and leaving the user stranded.
+- §3.7 — the picker hands its result over through `LocationDraftProvider` instead of
+  `router.back()` + `router.setParams()`. The icon defect is fixed at its root: nothing
+  anywhere could set an icon, so an icon picker was added.
+- §8.1 — one accent (#00D4AA). `lib/theme.ts` holds the value for props that need a real
+  colour string; the Tailwind token holds it for classes.
+- §8.2 — `location-picker` converted to NativeWind; its two hand-rolled palettes deleted.
+- §8.3 — `fontFamily: 'Courier'` removed. §8.4 — the inert notifications switch now
+  reflects real OS permission; the profile row's chevron-without-destination is gone.
+- §8.5 — the fixed 2-second splash delay removed.
+- §9.1 — cards no longer each call `getCurrentPositionAsync`; distance comes from the one
+  watch the screen owns. §9.2 — the doubled foreground permission prompt fixed.
+- §4.7 — permissions are no longer requested at launch. Startup only checks; the prompt
+  moves to the first reminder save, with an explanation.
+
+**Still open after day 3:**
+- §4.1 — `DELETE /api/auth/me` does not exist. The client is complete and will 404.
+- §5.8 / §2.6 — the alarm sound is still the 3.36s chime.
+- §9.3 overnight timeframes, §9.4 activity feed noise, §6.2 `(tab)` naming — all
+  explicitly out of scope for launch.
+
 **Resolved on `day2/alarm-notifications-and-geofencing` (30 August 2026):**
 - **§3.9 — the alarm channel now actually applies.** `channelId` moved to the trigger on
   both senders; the channel id is a constant and bumped to `proxi-alarm-v2`, with the
