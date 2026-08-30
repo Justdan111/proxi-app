@@ -84,6 +84,10 @@ The highest-risk section. Every item here fixes something that has never once wo
       backend is not accepting the `triggered` field — see the open question in
       `SESSION_LOG.md`
 - [ ] A `triggered` entry appears in the Activity tab
+- [ ] **Trigger a reminder while on another tab, then switch to Activity** — the new entry
+      is already there, with no pull-to-refresh *(audit §13.3)*
+- [ ] Trigger one while the app is backgrounded on the Activity tab, then foreground it —
+      the entry appears without touching anything
       *(background activity logging has never worked — it read the JWT from the wrong
       store — so this is a first)*
 
@@ -129,6 +133,11 @@ The highest-risk section. Every item here fixes something that has never once wo
 ### Permissions
 - [ ] A fresh install asks for location **only after the first reminder is saved**, with
       the explanation — not on launch *(Apple 5.1.5)*
+- [ ] **Decline the prompt, then enable "Always" in system settings and return to the app.**
+      Geofencing starts without a restart, and a reminder fires *(audit §13.1 — this was
+      silently dead for exactly the user who just went and enabled it)*
+- [ ] Revoke location in system settings while the app runs, return, and confirm the
+      "Proxi is active" foreground service stops
 - [ ] You are asked for foreground location **once**, not twice
 - [ ] Declining still saves the reminder
 - [ ] The Settings notifications switch reflects the real OS permission, and updates when

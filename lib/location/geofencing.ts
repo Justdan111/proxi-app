@@ -276,12 +276,19 @@ export async function startGeofencing() {
     });
   }
 
-  // Register backup background fetch
-  await BackgroundFetch.registerTaskAsync(BG_FETCH_TASK, {
-    minimumInterval:        15 * 60, // 15 minutes
-    stopOnTerminate:        false,
-    startOnBoot:            true,
-  });
+  // Register backup background fetch. Guarded because startGeofencing is now
+  // called on every foreground, to catch permission granted outside the app —
+  // so this has to be cheap to call when there is nothing to do.
+  const fetchRegistered = await TaskManager.isTaskRegisteredAsync(BG_FETCH_TASK)
+    .catch(() => false);
+
+  if (!fetchRegistered) {
+    await BackgroundFetch.registerTaskAsync(BG_FETCH_TASK, {
+      minimumInterval:        15 * 60, // 15 minutes
+      stopOnTerminate:        false,
+      startOnBoot:            true,
+    });
+  }
 }
 
 export async function stopGeofencing() {

@@ -9,6 +9,50 @@ blockers, and intent — the things that are not recoverable from the diff.
 
 ---
 
+## 2026-08-30 — Both re-audit P1s fixed
+
+**Branch:** `fix/geofence-restart-and-activity-refresh` → PR #11 (open, awaiting review)
+
+*Branched off `main`. PRs #9 and #10 are still open and also touch `AUDIT_REPORT.md`, so
+whichever merges last will need a trivial rebase on the §13 table — different rows, same
+table.*
+
+### §13.1 — permission granted outside the app now starts geofencing
+The check is extracted as `syncGeofencing` and runs on every foreground alongside the
+existing reminder re-fetch, instead of once per launch. It still never prompts — it reads
+the current answer and matches geofencing to it — so the Apple 5.1.5 behaviour day 3
+established is untouched.
+
+Matching it both ways turned out to matter: permission **revoked** in system settings while
+the app runs now stops the task, where before it stayed registered against a permission the
+app no longer had.
+
+One consequence had to be handled. `startGeofencing` is now called on every foreground, and
+it re-registered the background-fetch task unconditionally. Guarded with
+`TaskManager.isTaskRegisteredAsync` so repeating the call is cheap.
+
+### §13.3 — Activity refreshes
+`useFocusEffect` on tab open, plus an `AppState` listener for the case focus does not cover:
+returning to the foreground on a tab that is already showing, which is exactly when a
+geofence will have logged something while the user was elsewhere.
+
+Moving `load()` out of the mount effect also cleared the lint error the file carried at
+`activity.tsx:110` — lint went 8 → 7 on this branch.
+
+### Two verification checks added to device QA
+Neither fix is provable from the code, and both are easy to *assume* working:
+- Decline the permission, enable "Always" in system settings, return, and confirm a reminder
+  fires without a restart. Then revoke it and confirm the foreground service stops.
+- Trigger a reminder from another tab and switch to Activity; then trigger one while
+  backgrounded on Activity and foreground the app. The entry should already be there both
+  times, with no pull-to-refresh.
+
+### Next action
+Unchanged and external: 12 Play testers, `DELETE /api/auth/me`, both enrollments. §13.2 and
+§13.5 remain open at P2 and do not gate a tester build.
+
+---
+
 ## 2026-08-30 — Re-audit of the merged codebase
 
 **Branch:** `audit/2026-08-30` → PR #8 (open, awaiting review)

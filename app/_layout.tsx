@@ -1,7 +1,7 @@
 
 import '../global.css';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Redirect, Stack, router, useSegments } from 'expo-router';
 import * as ExpoSplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
@@ -88,19 +88,40 @@ function AppInitializer() {
     };
   }, [updateReminder]);
 
+  // Reads the current permission answer and matches geofencing to it. Never
+  // prompts: asking for Always location before the user has created a reminder
+  // gives them nothing to say yes to, which is what Apple guideline 5.1.5
+  // objects to. The prompt happens when the first reminder is saved.
+  const syncGeofencing = useCallback(async () => {
+    const perms = await checkPermissions();
+    if (perms.backgroundLocation) {
+      await startGeofencing();
+    } else {
+      // Covers revocation too — permission taken away in system settings while
+      // the app was running would otherwise leave the task registered.
+      await stopGeofencing();
+    }
+  }, []);
+
   // `once` completion is written by the background task, which cannot touch
   // React state. Re-read on foreground so the Completed badge is not stale.
+  //
+  // Geofencing is re-checked here for a different reason: the permission answer
+  // can change outside the app entirely. Someone who declines at first save and
+  // later enables "Always" in system settings would otherwise get no geofencing
+  // at all until the app was restarted — the core feature silently dead for
+  // precisely the user who just went and turned it on.
   useEffect(() => {
     if (!isAuthenticated) return;
 
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        void fetchReminders();
-      }
+      if (state !== 'active') return;
+      void fetchReminders();
+      void syncGeofencing();
     });
 
     return () => sub.remove();
-  }, [isAuthenticated, fetchReminders]);
+  }, [isAuthenticated, fetchReminders, syncGeofencing]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -108,19 +129,8 @@ function AppInitializer() {
       return;
     }
 
-    // Only check here — never prompt. Asking for Always location before the
-    // user has created a reminder gives them no context to say yes to, which
-    // is what Apple guideline 5.1.5 objects to. The prompt happens when the
-    // first reminder is saved, where the reason is self-evident.
-    const initGeofencing = async () => {
-      const perms = await checkPermissions();
-      if (perms.backgroundLocation) {
-        await startGeofencing();
-      }
-    };
-
-    void initGeofencing();
-  }, [isAuthenticated]);
+    void syncGeofencing();
+  }, [isAuthenticated, syncGeofencing]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
