@@ -6,7 +6,7 @@ import { Redirect, Stack, router, useSegments } from 'expo-router';
 import * as ExpoSplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StatusBar } from 'react-native';
+import { AppState, StatusBar } from 'react-native';
 import { ThemeProvider } from '@/context/themeContext';
 import { AuthProvider, useAuth } from '@/context/authContext';
 import { ReminderProvider, useReminders } from '@/context/reminderContext';
@@ -19,6 +19,7 @@ import {
 } from '@/lib/notifications/notifications';
 import { startGeofencing, stopGeofencing, cacheRemindersForBackground } from '@/lib/location/geofencing';
 import { requestAllPermissions } from '@/lib/location/permissions';
+import { haptics } from '@/lib/haptics';
 
 
 
@@ -26,8 +27,17 @@ ExpoSplashScreen.preventAutoHideAsync();
 
 function AppInitializer() {
   const { isAuthenticated } = useAuth();
-  const { reminders } = useReminders();
+  const { reminders, updateReminder, fetchReminders } = useReminders();
   const listenerRef = useRef<Notifications.EventSubscription | null>(null);
+  const receivedRef = useRef<Notifications.EventSubscription | null>(null);
+
+  // The notification listeners are registered once, so they would otherwise
+  // close over the reminders array as it was on first render. Mirrored in an
+  // effect rather than during render, which is not a legal place to touch a ref.
+  const remindersRef = useRef(reminders);
+  useEffect(() => {
+    remindersRef.current = reminders;
+  }, [reminders]);
 
   useEffect(() => {
     void setupNotificationChannel();
@@ -40,7 +50,18 @@ function AppInitializer() {
         }
       },
       (reminderId) => {
-        console.log('Marked done:', reminderId);
+        if (!reminderId) return;
+        const reminder = remindersRef.current.find(r => r.id === reminderId);
+        if (!reminder) return;
+
+        // A `once` reminder is finished, so it also auto-disables — which is
+        // what the add-reminder screen promises. An `always` reminder stays on.
+        void updateReminder(
+          reminderId,
+          reminder.frequency === 'once'
+            ? { triggered: true, enabled: false }
+            : { triggered: true }
+        );
       },
       (reminderId, data) => {
         if (reminderId) {
@@ -49,11 +70,36 @@ function AppInitializer() {
       }
     );
 
+    // A geofence firing while the app is open is the one case where a haptic
+    // can reach the user; the background task cannot fire one.
+    receivedRef.current = Notifications.addNotificationReceivedListener((notification) => {
+      const { type } = notification.request.content.data as { type?: string };
+      if (type === 'reminder_trigger') {
+        haptics.warning();
+      }
+    });
+
     return () => {
       listenerRef.current?.remove();
       listenerRef.current = null;
+      receivedRef.current?.remove();
+      receivedRef.current = null;
     };
-  }, []);
+  }, [updateReminder]);
+
+  // `once` completion is written by the background task, which cannot touch
+  // React state. Re-read on foreground so the Completed badge is not stale.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        void fetchReminders();
+      }
+    });
+
+    return () => sub.remove();
+  }, [isAuthenticated, fetchReminders]);
 
   useEffect(() => {
     if (!isAuthenticated) {

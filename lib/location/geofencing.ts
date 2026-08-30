@@ -3,15 +3,22 @@ import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { sendReminderNotification } from '../notifications/notifications';
-import { isInsideRadius, Coordinates } from './distance';
-import { Reminder } from '../api/reminders.api';
+import { getDistanceMetres, Coordinates } from './distance';
+import { Reminder, remindersApi } from '../api/reminders.api';
+import { activitiesApi } from '../api/activities.api';
 
 export const GEOFENCE_TASK   = 'PROXI_GEOFENCE_TASK';
 export const BG_FETCH_TASK   = 'PROXI_BG_FETCH_TASK';
 const REMINDERS_CACHE_KEY    = 'proxi_reminders_cache';
 const TRIGGERED_CACHE_KEY    = 'proxi_triggered_cache';
+const FENCE_STATE_KEY        = 'proxi_fence_state';
 
-// ─── Cache reminders for background task 
+// Leaving a fence requires travelling 15% past its radius. Without this, GPS
+// jitter at the boundary reads as a stream of exits and re-entries, and each
+// re-entry is a fresh notification.
+const EXIT_HYSTERESIS = 1.15;
+
+// ─── Cache reminders for background task
 // Background tasks can't use React context — they read from AsyncStorage
 export async function cacheRemindersForBackground(reminders: Reminder[]) {
   const enabled = reminders.filter(r => r.enabled);
@@ -35,6 +42,35 @@ async function markTriggered(id: string) {
   await AsyncStorage.setItem(TRIGGERED_CACHE_KEY, JSON.stringify([...ids]));
 }
 
+// ─── Geofence occupancy ────────────────────────────────────
+// `occupied` is the geometric fact: the user is inside this fence right now.
+// `notified` is per-visit: we have already alerted for this stay. They are
+// separate because a reminder can be entered outside its active timeframe —
+// occupancy starts immediately, but the alert is owed once the window opens.
+interface FenceState {
+  occupied: string[];
+  notified: string[];
+}
+
+async function getFenceState(): Promise<{ occupied: Set<string>; notified: Set<string> }> {
+  const raw = await AsyncStorage.getItem(FENCE_STATE_KEY);
+  if (!raw) return { occupied: new Set(), notified: new Set() };
+  try {
+    const parsed: FenceState = JSON.parse(raw);
+    return {
+      occupied: new Set(parsed.occupied ?? []),
+      notified: new Set(parsed.notified ?? []),
+    };
+  } catch {
+    return { occupied: new Set(), notified: new Set() };
+  }
+}
+
+async function setFenceState(occupied: Set<string>, notified: Set<string>) {
+  const state: FenceState = { occupied: [...occupied], notified: [...notified] };
+  await AsyncStorage.setItem(FENCE_STATE_KEY, JSON.stringify(state));
+}
+
 // ─── Check current time against reminder timeframe ─────────
 function isInTimeframe(timeframe?: { startTime: string; endTime: string }): boolean {
   if (!timeframe) return true; // no timeframe = always active
@@ -50,59 +86,98 @@ function isInTimeframe(timeframe?: { startTime: string; endTime: string }): bool
   return nowMins >= startMins && nowMins <= endMins;
 }
 
-// ─── Core proximity check logic 
-async function checkProximity(userCoords: Coordinates) {
-  const reminders   = await getCachedReminders();
-  const triggeredIds = await getTriggeredIds();
-
-  for (const reminder of reminders) {
-    // Skip "once" reminders that already fired
-    if (reminder.frequency === 'once' && triggeredIds.has(reminder.id)) continue;
-
-    // Skip if outside active timeframe
-    if (!isInTimeframe(reminder.timeframe)) continue;
-
-    const inside = isInsideRadius(userCoords, reminder.coordinates, reminder.radius);
-
-    if (inside) {
-  await sendReminderNotification({
-    reminderId:    reminder.id,
-    reminderTitle: reminder.title,
-    location:      reminder.location,
-    icon:          reminder.icon,
-  });
-
-      if (reminder.frequency === 'once') {
-        await markTriggered(reminder.id);
-      }
-
-      // Log to API in background (fire and forget)
-      try {
-        const token = await AsyncStorage.getItem('proxi_jwt_token');
-        if (token) {
-          fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/activities`, {
-            method:  'POST',
-            headers: {
-              'Content-Type':  'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              reminderId:    reminder.id,
-              reminderTitle: reminder.title,
-              location:      reminder.location,
-              icon:          reminder.icon,
-              eventType:     'triggered',
-            }),
-          });
-        }
-      } catch {
-        // Non-critical — notification already sent
-      }
+// ─── Server-side completion for `once` reminders ───────────
+// The UI promises "triggers once then auto-disables", and the Completed badge
+// reads the server's `triggered` field. Local state alone does not survive a
+// reinstall and does not sync across devices.
+async function completeOnceReminder(reminder: Reminder) {
+  try {
+    await remindersApi.update(reminder.id, { triggered: true, enabled: false });
+  } catch {
+    // Fall back to the toggle endpoint so the reminder at least auto-disables.
+    try {
+      await remindersApi.toggle(reminder.id);
+    } catch {
+      // Non-critical — the notification has already been delivered.
     }
   }
 }
 
-// ─── Background Location Task 
+// ─── Core proximity check logic
+async function checkProximity(userCoords: Coordinates) {
+  const reminders    = await getCachedReminders();
+  const triggeredIds = await getTriggeredIds();
+  const { occupied, notified } = await getFenceState();
+
+  let stateChanged = false;
+
+  for (const reminder of reminders) {
+    const distance   = getDistanceMetres(userCoords, reminder.coordinates);
+    const wasInside  = occupied.has(reminder.id);
+    // Entering uses the true radius; leaving has to clear the wider ring.
+    const threshold  = wasInside ? reminder.radius * EXIT_HYSTERESIS : reminder.radius;
+    const inside     = distance <= threshold;
+
+    if (!inside) {
+      if (wasInside) {
+        occupied.delete(reminder.id);
+        notified.delete(reminder.id);
+        stateChanged = true;
+      }
+      continue;
+    }
+
+    if (!wasInside) {
+      occupied.add(reminder.id);
+      stateChanged = true;
+    }
+
+    // Already alerted for this visit — this is what stops the once-a-minute spam.
+    if (notified.has(reminder.id)) continue;
+
+    // Skip "once" reminders that already fired
+    if (reminder.frequency === 'once' && triggeredIds.has(reminder.id)) continue;
+
+    // Outside the active window. Stay occupied but owe the alert, so it fires
+    // once the window opens rather than never.
+    if (!isInTimeframe(reminder.timeframe)) continue;
+
+    await sendReminderNotification({
+      reminderId:    reminder.id,
+      reminderTitle: reminder.title,
+      location:      reminder.location,
+      icon:          reminder.icon,
+    });
+
+    notified.add(reminder.id);
+    stateChanged = true;
+
+    if (reminder.frequency === 'once') {
+      await markTriggered(reminder.id);
+      await completeOnceReminder(reminder);
+    }
+
+    // Log to the API. Goes through the shared client, so it picks up the JWT
+    // from SecureStore and the same base URL as every other request.
+    try {
+      await activitiesApi.log({
+        reminderId:    reminder.id,
+        reminderTitle: reminder.title,
+        location:      reminder.location,
+        icon:          reminder.icon,
+        eventType:     'triggered',
+      });
+    } catch {
+      // Non-critical — notification already sent
+    }
+  }
+
+  if (stateChanged) {
+    await setFenceState(occupied, notified);
+  }
+}
+
+// ─── Background Location Task
 // Fires every ~100m of movement or every few minutes
 TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }: any) => {
   if (error) {
@@ -120,7 +195,7 @@ TaskManager.defineTask(GEOFENCE_TASK, async ({ data, error }: any) => {
   });
 });
 
-// ─── Background Fetch Task 
+// ─── Background Fetch Task
 // Backup check every 15 minutes even without movement
 TaskManager.defineTask(BG_FETCH_TASK, async () => {
   try {
@@ -139,7 +214,7 @@ TaskManager.defineTask(BG_FETCH_TASK, async () => {
   }
 });
 
-// ─── Start/Stop Tracking 
+// ─── Start/Stop Tracking
 export async function startGeofencing() {
   // Start background location updates
   const isRegistered = await Location.hasStartedLocationUpdatesAsync(GEOFENCE_TASK)

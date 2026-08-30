@@ -93,7 +93,7 @@
           "sounds": [
             "./assets/sounds/proxi_alert.wav"
           ],
-          "defaultChannel": "proxi-alarm"
+          "defaultChannel": "proxi-alarm-v2"
         }
       ]
     ],

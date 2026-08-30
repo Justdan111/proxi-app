@@ -6,7 +6,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useTheme } from '@/context/themeContext';
 import { useReminders } from '@/context/reminderContext';
 import ReminderMap from '@/components/maps/ReminderMap';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { haptics } from '@/lib/haptics';
 
 const TIME_24H_REGEX = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
@@ -40,7 +40,7 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const router = useRouter();
   const { isDark } = useTheme();
-  const { reminders, createReminder, error: reminderError } = useReminders();
+  const { createReminder, error: reminderError } = useReminders();
   const params = useLocalSearchParams<{ 
     selectedLocation?: string; 
     selectedAddress?: string;
@@ -96,21 +96,6 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
 
   const radiusOptions = [100, 300, 500];
 
-  // Cache reminders for background tasks
-  useEffect(() => {
-    async function cacheRemindersForBackground() {
-      try {
-        await AsyncStorage.setItem('cachedReminders', JSON.stringify(reminders));
-      } catch (err) {
-        console.error('Error caching reminders for background:', err);
-      }
-    }
-
-    if (reminders.length > 0) {
-      void cacheRemindersForBackground();
-    }
-  }, [reminders]);
-
   const startMinutes = parseTimeToMinutes(startTime);
   const endMinutes = parseTimeToMinutes(endTime);
   const timeframeFormatInvalid = useTimeframe && (startMinutes === null || endMinutes === null);
@@ -138,11 +123,13 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
     const trimmedLocationAddress = locationAddress.trim();
 
     if (!trimmedTitle || !locationCoords || !trimmedLocationName || !trimmedLocationAddress) {
+      haptics.error();
       setSaveError('Please add a title and select a valid location before saving.');
       return;
     }
 
     if (timeframeError) {
+      haptics.error();
       setSaveError(timeframeError);
       return;
     }
