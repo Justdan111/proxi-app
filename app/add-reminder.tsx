@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, SafeAreaView,  Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, SafeAreaView, Modal, Alert } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Easing,  SlideInUp, FadeInDown, } from 'react-native-reanimated';
 import { X, Check, Clock, Repeat, Repeat1, MapPin } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -8,6 +8,8 @@ import { useReminders } from '@/context/reminderContext';
 import ReminderMap from '@/components/maps/ReminderMap';
 import { haptics } from '@/lib/haptics';
 import { useLocationDraft } from '@/context/locationDraftContext';
+import { checkPermissions, requestBackgroundLocation, requestNotificationPermission } from '@/lib/location/permissions';
+import { startGeofencing } from '@/lib/location/geofencing';
 import { ACCENT } from '@/lib/theme';
 
 // The reminder icon had no way to be set, so every reminder saved as the
@@ -109,6 +111,41 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
     !saving &&
     !timeframeError;
 
+  // Contextual permission prompt (audit 4.7). Never blocks the save.
+  const ensureRemindersCanFire = async () => {
+    try {
+      const status = await checkPermissions();
+
+      if (!status.notifications) {
+        await requestNotificationPermission();
+      }
+
+      if (!status.backgroundLocation) {
+        const granted = await new Promise<boolean>((resolve) => {
+          Alert.alert(
+            'Let Proxi Watch For This Place',
+            'To alert you when you arrive, Proxi needs location access set to "Always". It only checks your location against the reminders you have saved.',
+            [
+              { text: 'Not Now', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Continue', onPress: () => resolve(true) },
+            ],
+            { cancelable: false }
+          );
+        });
+
+        if (granted && (await requestBackgroundLocation())) {
+          await startGeofencing();
+        }
+        return;
+      }
+
+      await startGeofencing();
+    } catch {
+      // The reminder is saved either way; it simply will not fire until the
+      // permission is granted from Settings.
+    }
+  };
+
   const handleSave = async () => {
     const trimmedTitle = title.trim();
     const trimmedLocationName = locationName.trim();
@@ -145,6 +182,10 @@ export default function AddReminderScreen({ onBack }: AddReminderScreenProps) {
         setSaveError(reminderError || 'Unable to save reminder. Please try again.');
         return;
       }
+
+      // Ask for what the reminder actually needs, now that the user has made
+      // one and the reason is obvious. Declining still saves the reminder.
+      await ensureRemindersCanFire();
 
       setSaved(true);
       setTimeout(() => {

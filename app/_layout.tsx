@@ -19,7 +19,7 @@ import {
   snoozeReminder,
 } from '@/lib/notifications/notifications';
 import { startGeofencing, stopGeofencing, cacheRemindersForBackground } from '@/lib/location/geofencing';
-import { requestAllPermissions } from '@/lib/location/permissions';
+import { checkPermissions } from '@/lib/location/permissions';
 import { haptics } from '@/lib/haptics';
 
 
@@ -108,8 +108,12 @@ function AppInitializer() {
       return;
     }
 
+    // Only check here — never prompt. Asking for Always location before the
+    // user has created a reminder gives them no context to say yes to, which
+    // is what Apple guideline 5.1.5 objects to. The prompt happens when the
+    // first reminder is saved, where the reason is self-evident.
     const initGeofencing = async () => {
-      const perms = await requestAllPermissions();
+      const perms = await checkPermissions();
       if (perms.backgroundLocation) {
         await startGeofencing();
       }
