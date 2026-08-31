@@ -1335,6 +1335,54 @@ today. Since §11.1/§11.5/§11.6 all require real hardware — background geofe
 notification delivery are not simulator-testable — **the store enrollment in §11.9 blocks
 device QA too, not just submission.** That dependency was not previously recorded.
 
+### 14.6 `SafeAreaView` from `react-native` silently drops every page background — P0
+
+Symptom: after the SDK 57 client booted, every screen rendered as a blank near-white page.
+Icons appeared; **no text did**.
+
+**Root cause.** All five screens imported `SafeAreaView` from `react-native`:
+[app/(tab)/home.tsx:3](app/(tab)/home.tsx#L3),
+[app/(tab)/settings.tsx:7](app/(tab)/settings.tsx#L7),
+[app/(tab)/activity.tsx:2](app/(tab)/activity.tsx#L2),
+[app/add-reminder.tsx:2](app/add-reminder.tsx#L2),
+[app/location-picker.tsx:4](app/location-picker.tsx#L4).
+
+NativeWind only registers `cssInterop` for the **`react-native-safe-area-context`**
+version — `react-native-css-interop/dist/runtime/components.js:49`. React Native's own
+`SafeAreaView` is not in the mapping table, so `className="flex-1 bg-background
+dark:bg-background-dark"` on every page container was **silently ignored**. No error, no
+warning: the prop is simply not read.
+
+The result is a two-part failure that looks worse than its cause:
+
+| Layer | What happened |
+|---|---|
+| Page container | `className` dropped → no background, no `flex-1`. The OS default `#f2f2f2` showed through |
+| Everything inside | NativeWind working normally, dark mode active → `dark:text-foreground-dark` = `#f5f5f5` |
+
+Near-white text on a near-white background. The content was rendering the whole time.
+
+**Why the obvious suspect was wrong.** The risk register predicted "NativeWind breaks under
+RN 0.86 — every screen loses styling", and this looks exactly like that. It is not.
+A probe rendered in the running app proved NativeWind is fully functional: a
+`className="text-black"` `<Text>` and a `className="bg-blue-600"` `<View>` both rendered
+correctly while the surrounding screen stayed blank. The Babel transform was also verified
+in the served bundle — every element routes through
+`_reactNativeCssInteropJsxRuntime.jsx` with `className` intact. **The bug was ours: one
+wrong import path, repeated five times.**
+
+**Fix.** Import `SafeAreaView` from `react-native-safe-area-context` on all five screens.
+That package is already a dependency, and React Navigation supplies the required provider,
+so no root change was needed. Verified on the simulator: the dark theme, header, search,
+empty state and tab bar all render, and the live-location badge is active.
+
+This also clears a deprecation: RN 0.86 warns that its own `SafeAreaView` "has been
+deprecated and will be removed in a future release"
+(`node_modules/react-native/index.js:96`).
+
+**The lesson worth keeping:** a `className` on an unmapped component fails *silently*.
+Nothing in `tsc`, lint, or the bundler can see it — only running the app can.
+
 ### Verified this session
 
 Against the local API (Go, Docker, listening on `*:8080`), with a throwaway account:

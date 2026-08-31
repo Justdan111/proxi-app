@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, AppState, RefreshControl, SafeAreaView, ScrollView, Text, TouchableOpacity,View,
+import { ActivityIndicator, AppState, RefreshControl, ScrollView, Text, TouchableOpacity,View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import Animated, { Easing, FadeInDown, useAnimatedStyle, useSharedValue, withSpring, withTiming,
 } from 'react-native-reanimated';
