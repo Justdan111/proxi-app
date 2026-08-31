@@ -1,11 +1,17 @@
-import React, { useEffect } from 'react';
-import { View, Text, Animated } from 'react-native';
-import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
-import { ACCENT } from '@/lib/theme';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Animated, Image } from 'react-native';
 
+// Shown while the stored token is read. It mirrors the native splash — same
+// mark, same ground — so the handover from the launch screen to JS is not a
+// visible change of scene.
 export default function SplashScreen() {
-  const fadeAnim = new Animated.Value(0);
-  const scaleAnim = new Animated.Value(0.8);
+  // Created once via lazy state, not rebuilt per render: `new Animated.Value()`
+  // in the render body handed the effect a different object on every pass, so
+  // the animation restarted from 0 each time and could never settle. A ref
+  // would also work but reading `.current` during render is what the React
+  // Compiler forbids, and this project has it enabled.
+  const [fadeAnim] = useState(() => new Animated.Value(0));
+  const [scaleAnim] = useState(() => new Animated.Value(0.8));
 
   useEffect(() => {
     Animated.parallel([
@@ -20,7 +26,7 @@ export default function SplashScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, [fadeAnim, scaleAnim]);
 
   return (
     <View className="flex-1 bg-background dark:bg-background-dark items-center justify-center">
@@ -30,38 +36,19 @@ export default function SplashScreen() {
           transform: [{ scale: scaleAnim }],
         }}
       >
-        <View className="items-center">
-          <Svg width={200} height={200} viewBox="0 0 200 200">
-            <Defs>
-              <RadialGradient id="dotGradient" cx="50%" cy="50%" r="50%">
-                <Stop offset="0%" stopColor={ACCENT} stopOpacity="0.8" />
-                <Stop offset="100%" stopColor={ACCENT} stopOpacity="0.2" />
-              </RadialGradient>
-            </Defs>
-            <Circle cx="100" cy="100" r="80" fill="none" stroke="#3a3a3a" strokeWidth="1" />
-            {Array.from({ length: 144 }).map((_, i) => {
-              const angle = (i / 144) * Math.PI * 2;
-              const radius = 70 + Math.sin(angle * 3) * 10;
-              const x = 100 + Math.cos(angle) * radius;
-              const y = 100 + Math.sin(angle) * radius;
-              const opacity = 0.3 + (Math.sin(angle) * 0.7);
-              return (
-                <Circle
-                  key={i}
-                  cx={x}
-                  cy={y}
-                  r="1.5"
-                  fill={ACCENT}
-                  opacity={opacity}
-                />
-              );
-            })}
-          </Svg>
-        </View>
+        <Image
+          source={require('@/assets/images/splash-icon.png')}
+          style={{ width: 180, height: 180 }}
+          resizeMode="contain"
+          accessibilityRole="image"
+          accessibilityLabel="Proxi"
+        />
       </Animated.View>
 
-      <Animated.View style={{ opacity: fadeAnim, marginTop: 40 }}>
-        <Text className="text-foreground dark:text-foreground-dark text-2xl font-semibold">PROXI APP</Text>
+      <Animated.View style={{ opacity: fadeAnim, marginTop: 32 }}>
+        <Text className="text-foreground dark:text-foreground-dark text-2xl font-semibold text-center">
+          Proxi
+        </Text>
         <Text className="text-muted-foreground dark:text-muted-foreground-dark text-sm text-center mt-2">
           Reminding you when you&apos;re near
         </Text>

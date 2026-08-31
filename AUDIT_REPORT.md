@@ -1383,6 +1383,7 @@ deprecated and will be removed in a future release"
 **The lesson worth keeping:** a `className` on an unmapped component fails *silently*.
 Nothing in `tsc`, lint, or the bundler can see it — only running the app can.
 
+<<<<<<< HEAD
 ### 14.7 History tab — added 31 August 2026
 
 A fourth tab, between Home and Activity, listing reminders that have finished so they can
@@ -1406,6 +1407,49 @@ This supersedes the "three tabs at launch" line in §7. Four tabs also happens t
 the add-button collision differently: the centre of a four-tab bar is the seam between two
 tabs rather than a label. The button still sits above the bar, so neither case depends on
 tab count.
+=======
+### 14.8 A cold launch showed "Unmatched Route" — P0
+
+The app opened on expo-router's **Unmatched Route** screen at `proxi:///` instead of the
+app. Signed-in users only, which is why it survived a session of testing on the login and
+signup screens.
+
+**Root cause.** Nothing in `app/` matched `/`. There was no `app/index.tsx`, and **a route
+group is not a route** — `(tab)` does not answer `/`. `RootNavigator`
+([app/_layout.tsx](app/_layout.tsx)) covers two cases and falls through on the third:
+
+| State | Path | Result |
+|---|---|---|
+| Signed out | `/` | `<Redirect href="/(auth)/login" />` — fine |
+| Signed in | `/(auth)/…` | `<Redirect href="/(tab)/home" />` — fine |
+| **Signed in** | **`/`** | **falls through to `<Stack>`, which has no index to render** |
+
+`app/index.tsx` now owns `/` and redirects to home or login, holding the splash while the
+stored token is still being read so an already-signed-in user never sees a flash of login.
+
+**Why it appeared only now.** Signing in leaves the router on `/(tab)/home`, so the bug is
+invisible for the rest of that session. It takes a cold launch *while signed in* — which
+first became possible on 31 August, when a working dev client (§14.5) and a working
+backend (§14.1) existed at the same time.
+
+### 14.9 The splash screen was the Expo template placeholder — P2
+
+`assets/images/splash-icon.png` was still the scaffold's grid-and-concentric-circles
+image, so every launch showed Expo's placeholder rather than Proxi's mark. It is now built
+from the adaptive icon foreground with its safe-zone padding trimmed, so `imageWidth` in
+the config controls the rendered size rather than the asset's own margin.
+
+The splash grounds were `#ffffff` and `#000000`; the app's are `#f8f9fa` and `#0a0a0a`.
+Both now match the palette, so the launch screen no longer flashes a different shade than
+the app it opens into.
+
+`components/splashScreen.tsx` — the JS splash shown while the token is read — carries the
+same mark, so the native-to-JS handover is not a visible change of scene. Two defects fixed
+in passing: its `Animated.Value`s were reconstructed on every render, restarting the
+animation each pass, and the replacement must use lazy state rather than a ref, because
+this project enables the React Compiler and reading `ref.current` during render is exactly
+what it forbids.
+>>>>>>> fix/launch-routing-and-splash
 
 ### Verified this session
 
