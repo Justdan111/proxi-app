@@ -5,13 +5,15 @@ import { useTheme } from '@/context/themeContext';
 import { ACCENT } from '@/lib/theme';
 import { View, TouchableOpacity } from 'react-native';
 
-// The bar is docked to the bottom edge. The add button sits above it rather
-// than on it: centred on the bar it lands on a tab's label — the middle slot
-// with three tabs, the seam between two with four. FAB_GAP is the air between
-// the button and the bar.
+// The bar is docked to the bottom edge, and the add button straddles its top
+// edge. That only works because there are four tabs: the centre of a four-tab
+// bar is the seam between History and Activity, so the button hangs over a gap
+// rather than a label. At three tabs it would sit on the middle one.
+// FAB_OVERLAP is how far the button hangs down into the bar.
 const BAR_HEIGHT = 70;
+const BAR_PAD_TOP = 14;
 const FAB_SIZE = 60;
-const FAB_GAP = 12;
+const FAB_OVERLAP = 0.45;
 
 export default function AppLayout() {
   const { isDark } = useTheme();
@@ -30,7 +32,10 @@ export default function AppLayout() {
             borderTopColor: isDark ? '#2a2a2a' : '#e5e7eb',
             borderTopWidth: 1,
             height: BAR_HEIGHT + insets.bottom,
-            paddingBottom: insets.bottom + 8,
+            // Sits the icon and label lower in the bar, clear of the button
+            // hanging over the top edge.
+            paddingTop: BAR_PAD_TOP,
+            paddingBottom: insets.bottom + 6,
           },
           tabBarLabelStyle: {
             fontSize: 11,
@@ -73,11 +78,11 @@ export default function AppLayout() {
         />
       </Tabs>
 
-      {/* Add reminder. Cleared of the bar so every label stays readable. */}
+      {/* Add reminder, hanging over the bar's top edge into the tab seam. */}
       <View
         style={{
           position: 'absolute',
-          bottom: BAR_HEIGHT + insets.bottom + FAB_GAP,
+          bottom: BAR_HEIGHT + insets.bottom - FAB_SIZE * FAB_OVERLAP,
           alignSelf: 'center',
           zIndex: 100,
         }}
@@ -94,6 +99,8 @@ export default function AppLayout() {
             height: FAB_SIZE,
             justifyContent: 'center',
             alignItems: 'center',
+            borderWidth: 4,
+            borderColor: isDark ? '#1a1a1a' : '#ffffff',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 6 },
             shadowOpacity: 0.35,
