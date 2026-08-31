@@ -57,6 +57,14 @@ Both illustrate the same thing, and it is the reason the device pass matters mor
 another reading of the code: **fixing one defect can expose another that was previously
 unreachable.**
 
+The 31 August session (§14) is the same pattern once more. Connecting account deletion to a
+backend that finally answers exposed two defects that could not have been found by reading
+the client alone — a local-API switch that had never once worked (§14.1), and a deleted
+account leaving the session alive indefinitely because this API returns `404` where the
+client only handled `401` (§14.2). Both are fixed. The map stack was re-examined in the
+same session and the day-1 decision stands (§5.1); the live-location question underneath it
+is §14.4, and it is not a map question.
+
 ### Timeline reality
 
 | Milestone | Blocking factor | Status |
@@ -319,13 +327,17 @@ console.log('Marked done:', reminderId);
 
 Tapping Done does nothing. Reviewer-visible incomplete functionality.
 
-### 3.6 Expired sessions strand the user — P1
+### 3.6 Expired sessions strand the user — P1 — **RESOLVED, then widened (§14.2)**
 [lib/api/client.ts:65](lib/api/client.ts#L65)
 
 The 401 interceptor deletes the token but has no channel back to `authContext`.
 `user` stays populated and `isAuthenticated` stays `true`, so the user remains on
 a home screen where every request fails, with no path to re-authenticate short of
 force-quitting the app.
+
+Fixed on day 3 by `setUnauthorizedHandler`. **A second route into the same dead end
+was found on 31 August** once a real deletion endpoint existed: a *deleted* account
+produces `404`, not `401`, so none of this machinery fired. See §14.2.
 
 ### 3.7 Location handoff is racy and drops the icon — P1
 [app/location-picker.tsx:1062](app/location-picker.tsx#L1062)
@@ -505,6 +517,42 @@ Rationale:
 `expo-maps` was evaluated and **rejected**: it is still alpha ("subject to breaking
 changes"), unavailable in Expo Go, and requires a **minimum deployment target of
 iOS 18.0**, which would exclude a large share of devices.
+
+#### Re-confirmed 31 August 2026, with the migration already merged
+
+The Mapbox question was raised again. The state of the code answers most of it: the
+migration shipped on day 1 and `grep -r mapbox` across the source returns **nothing**.
+`components/maps/ReminderMap.tsx:30` renders Apple Maps on iOS (`provider={undefined}`)
+and Google Maps on Android (`PROVIDER_GOOGLE`). Re-adding Mapbox means reverting merged,
+reviewed work.
+
+The decision holds, for reasons specific to what this app asks of a map:
+
+| | `react-native-maps` (current) | `@rnmapbox/maps` |
+|---|---|---|
+| iOS key / billing | **None** — Apple Maps is native | Token required, billed by map load |
+| Android key | Google free-tier key | Second token; **also** a `MAPBOX_DOWNLOADS_TOKEN` at build time |
+| Build cost | No extra native SDK | ~4 MB+ binary, and the download token gated device builds until it was removed |
+| Radius circle | Native `<Circle radius={meters}>` — fixed §5.3 | Manual `ShapeSource` + `CircleLayer` geometry |
+| Custom cartography, offline tiles | Not offered | **Genuinely better** |
+| Live location accuracy | *Not a map concern — see below* | *Not a map concern* |
+
+Mapbox wins on custom styling and offline tiles. Proxi displays a pin, a radius circle,
+and a tap target — it uses neither. The one previously recorded strike against Mapbox
+(geocoding accuracy, §5.2) also still stands, and geocoding has since moved behind
+`GeocodingProvider` anyway.
+
+**The map renderer has nothing to do with live location.** Position, background tracking
+and geofence evaluation come from `expo-location` and `expo-task-manager`
+([lib/location/geofencing.ts:265](lib/location/geofencing.ts#L265)); the map is a display
+surface that draws a coordinate someone else produced. Swapping renderers would not change
+accuracy, battery use, or background reliability by any amount. The live-location question
+that *is* real is §14.4.
+
+**If the Android map looks blank, that is not the renderer.**
+`GOOGLE_MAPS_ANDROID_API_KEY` is still unset in `.env`, which
+[app.config.ts](app.config.ts) warns about at config time. Mapbox would not fix this —
+it would replace one missing token with two.
 
 ### 5.2 Geocoding
 Place search and reverse geocoding move to **expo-location's native geocoder**
@@ -1137,3 +1185,117 @@ reach any of §13.1 through §13.4 — three of the four were found by reading, 
 concurrency race fixed on `fix/geofence-concurrency` needed two background tasks in view at
 once to see at all. Until `release/DEVICE_QA.md` has been run on hardware, every behavioural
 claim in this document is *implemented and unverified*.
+
+## 14. Session Findings — 31 August 2026
+
+The session that connected account deletion to a real backend. Two of the three defects
+below were **invisible until the endpoint existed** — the client had been written against
+an endpoint nobody could call, so its error handling had never met a real response.
+
+### 14.1 The local-API switch was unreachable — P1 — **RESOLVED**
+
+[lib/api/client.ts:32](lib/api/client.ts#L32)
+
+`resolveBaseUrl` read `EXPO_PUBLIC_API_URL` first and returned on the first non-empty
+value. `.env` ships the production URL, so the branch below it — the whole
+`EXPO_PUBLIC_USE_LOCAL_API` path, including the emulator and LAN host resolution — was
+dead code. **Every development run hit Railway**, and the only way to reach a local API
+was to comment the production URL out of `.env` and remember to put it back.
+
+The flag is now checked first and remains gated on `__DEV__`, so a release build cannot
+resolve to a developer's laptop regardless of what `.env` says. Six precedence cases were
+checked, including that gate.
+
+*Not a regression — the flag had never worked since it was introduced.*
+
+### 14.2 A deleted account left the session alive forever — P1 — **RESOLVED**
+
+[context/authContext.tsx:82](context/authContext.tsx#L82)
+
+The bootstrap cleared the session only on `401`. The backend answers `GET /api/auth/me`
+with **`404 "user not found"`** once the account is gone — the token is still perfectly
+valid, it is the user that no longer exists — so nothing fired. The app kept its cached
+user, `isAuthenticated` stayed `true`, and the account appeared to be signed in against
+permanently empty data. `GET /api/reminders` compounds it: with a deleted user's token it
+returns **`200 []`**, not `401`, so no downstream call trips the interceptor either.
+
+Two ordinary paths reach this state:
+
+1. Delete the account on one device — every other signed-in device stays "logged in".
+2. Delete it on *this* device and lose the app between the server's `200` and the
+   SecureStore wipe. The teardown is not atomic and cannot be.
+
+`404` on that one route is now treated as a dead session, running the full
+`clearLocalSession()` teardown rather than the previous inline token+user clear — so the
+`proxi_*` AsyncStorage keys are wiped and geofencing is stopped, which the old path
+skipped. The rule is deliberately scoped to `/api/auth/me`: `404` elsewhere legitimately
+means "no such reminder".
+
+*This is §3.6's failure mode arriving through a different status code.*
+
+### 14.3 The production API is not deployed — P0, external
+
+`https://proxi-api-production.up.railway.app` returns
+
+```json
+{"status":"error","code":404,"message":"Application not found"}
+```
+
+with `x-railway-fallback: true`, for **every** route — `/api/auth/login` included. This is
+Railway's edge answering for a service that is not there, not the API returning 404.
+
+This supersedes the old §4.1 blocker and is strictly larger than it. A production build
+today cannot sign in, so no store submission and no external tester build is possible,
+whatever the app binary does. §4.1's endpoint is written and verified; it is verified
+*locally*, and stays that way until something is deployed.
+
+### 14.4 Location tracking is continuous updates, not OS geofences — P2
+
+[lib/location/geofencing.ts:265](lib/location/geofencing.ts#L265)
+
+The real live-location question, and unrelated to the map stack (§5.1).
+
+`startGeofencing` calls `Location.startLocationUpdatesAsync` with
+`Accuracy.Balanced`, `distanceInterval: 50`, `timeInterval: 60000`, then evaluates every
+fence in JS with `getDistanceMetres`. It does **not** use `startGeofencingAsync`, which
+hands regions to the OS.
+
+The trade-off, stated plainly because it is a real fork and neither side is free:
+
+| | Current — continuous updates | `startGeofencingAsync` — OS regions |
+|---|---|---|
+| Battery | App wakes on a distance/time cadence regardless of proximity | OS-scheduled; it already knows where the user is |
+| Region limit | Unlimited | **20 on iOS**, 100 on Android |
+| Latency | Bounded by the interval | Faster, and OS-optimised |
+| Control | Full — hysteresis, timeframes, per-visit state all live in our code | Coarse enter/exit events only |
+| Android UX | Requires the persistent foreground-service notification | No permanent notification |
+
+The current design bought §3.1's fix: `EXIT_HYSTERESIS`, per-visit `notified` state, and
+timeframe-aware alerts are all logic the OS geofence API cannot express. That was the
+right call and it should not be undone casually.
+
+But it is worth knowing that the app pays a continuous background-location cost for it,
+and that the cost is **the thing users notice** — the Android foreground-service
+notification is permanent, and iOS shows the blue bar
+(`showsBackgroundLocationIndicator: true`). §13.2 already flags the worst case: this runs
+even with nothing to watch.
+
+**No change recommended before launch.** Device QA measures whether battery drain is
+actually a problem; changing the tracking model on the assumption that it is, days before
+a submission, trades a known system for an unknown one. Revisit with §13.2 and with real
+battery numbers from `release/DEVICE_QA.md`.
+
+### Verified this session
+
+Against the local API (Go, Docker, listening on `*:8080`), with a throwaway account:
+
+- Account deletion end to end — the five checks tabulated in §4.1, all passing.
+- The endpoint returns `200` with a JSON body, not the `204` §4.1 originally specified.
+  The client ignores the body, so nothing needed changing.
+- `DELETE` repeated with the same token returns `200`. Idempotent — no error path.
+- Base-URL precedence across six configurations, including that `__DEV__` gating holds.
+- `tsc --noEmit` clean. Lint 5 problems, all pre-existing, none in the files touched.
+
+**Not verified:** any of it on a device. The deletion flow has been exercised with `curl`
+against the API, never through the Settings screen on hardware. The `404` bootstrap path
+in §14.2 in particular has been reasoned about and typechecked, not observed.
