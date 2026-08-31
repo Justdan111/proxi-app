@@ -9,6 +9,51 @@ blockers, and intent — the things that are not recoverable from the diff.
 
 ---
 
+## 2026-08-31 — Cold launch fixed, and the splash stopped being Expo's
+
+**Branch:** `fix/launch-routing-and-splash` (off `main`) → PR #14
+
+### Completed
+- **`/` had no route.** A cold launch while signed in landed on expo-router's
+  **Unmatched Route** screen. A group is not a route, so `(tab)` never answered `/`, and
+  `RootNavigator` only redirects the signed-out and the in-`(auth)` cases — a signed-in
+  user at `/` fell through to a `Stack` with no index. `app/index.tsx` now owns it.
+  Audit §14.8.
+- **The splash was the Expo placeholder** — the scaffold's grid and concentric circles.
+  Rebuilt from the adaptive icon foreground with its safe-zone padding trimmed, and the
+  splash grounds moved from `#ffffff`/`#000000` to the palette's `#f8f9fa`/`#0a0a0a` so
+  launch no longer flashes a different shade. Audit §14.9.
+- The JS splash carries the same mark now. Its `Animated.Value`s were rebuilt every render,
+  restarting the animation each pass; fixed with lazy state.
+
+### Decisions made
+| Decision | Chosen | Rejected / why |
+|---|---|---|
+| Who owns `/` | A real `app/index.tsx` | Another branch inside `RootNavigator` — leaves `/` genuinely unrouted, so any direct link to it still 404s |
+| Splash asset source | Adaptive icon foreground, trimmed | `icon.png` — it is RGB on a light ground, which would show as a white square on the dark splash |
+| Animated values | Lazy `useState` | `useRef(...).current` — lints as "Cannot access refs during render" under this project's React Compiler |
+
+### Verified
+- `tsc --noEmit` clean. Lint **4 problems, down from 5** — the splash rewrite also cleared a
+  pre-existing `exhaustive-deps` warning.
+- Cold launch on the simulator (`simctl terminate` then `launch`) lands on Home. Confirmed
+  against the exact failure Dan reported.
+
+### Not verified
+- The **native** splash image. It is baked at build time, so it needs a prebuild and native
+  rebuild; that was running when this entry was written.
+
+### Found, not chased
+- **The `buy food` test reminder is gone** from the account — Home reads 0 total. It may
+  have been removed by the synthetic clicks used earlier to drive the simulator, which were
+  unreliable enough to have hit a delete confirmation. Flagged rather than assumed.
+
+### Next action
+**Confirm the native splash shows the Proxi mark** once the rebuild finishes, then press
+**Set up again** on the History tab (PR #13) — still the one unexercised control.
+
+---
+
 ## 2026-08-31 — Account deletion connected to the local API
 
 **Branch:** `fix/account-deletion-endpoint` (off `origin/main`) → no PR yet
