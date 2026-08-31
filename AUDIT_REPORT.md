@@ -1285,6 +1285,56 @@ actually a problem; changing the tracking model on the assumption that it is, da
 a submission, trades a known system for an unknown one. Revisit with §13.2 and with real
 battery numbers from `release/DEVICE_QA.md`.
 
+### 14.5 The iOS dev client predates the SDK 57 upgrade — P1, and it is why device QA never happened
+
+Symptom, on launch, before any UI:
+
+```
+[runtime not ready]: ReferenceError: Property 'MessageQueue' doesn't exist
+```
+
+with a stack of nothing but `metroRequire` / `guardedLoadModule` frames — a failure during
+module load, before React starts.
+
+**Root cause.** The only successful iOS dev-client build (`eas build:list`) is from
+**20 April 2026 against SDK 54.0.0**, commit `2eb5dcc` — before the day-1 upgrade. The
+project is now SDK 57 / RN 0.86. Metro serves an RN 0.86 bundle to an RN 0.81-era native
+runtime. RN 0.86 is bridgeless by default; the SDK 54 client expects the old bridge, and
+`MessageQueue` / `__fbBatchedBridge` **is** that bridge.
+
+Fingerprints confirm it:
+
+| | Fingerprint |
+|---|---|
+| Installed dev client (April, SDK 54) | `1be15a663b52fc6c4062b59e0c9e480266c63f33` |
+| Current project (SDK 57) | `e2e3873a4a264e264fe2130984e3f917c2b6b591` |
+
+**Ruled out, with evidence, so no one re-runs this:**
+- *Not a bundling failure.* Metro completes cleanly — 3,679 modules, no error.
+- *Not app code, and not a library.* Every `MessageQueue` occurrence in the served bundle
+  is a local `var` inside RN's own `BatchedBridge/MessageQueue.js` (module 25). Nothing in
+  the bundle reads it as a global; the bad reference comes from the mismatched native side.
+- *Not Metro cache corruption.* `MessageQueue.js` depending on module ids 3679/3680 looks
+  wrong for a graph of 3,679 modules, but those resolve to `@babel/runtime` helpers
+  `classCallCheck` and `createClass`. The graph is sound.
+- *Not the account-deletion work.* That touched two files, neither loaded at bridge setup.
+
+**Why this matters beyond one error.** This is the mechanical reason the §1.1 verification
+gate has stayed open since day 1 and every behavioural claim in this report is still
+*implemented and unverified*: **the app on the simulator has never once run the upgraded
+code.** No amount of reading finds a defect that only appears when SDK 57 actually boots.
+
+**Fix.** Rebuild the dev client on SDK 57 — `npx expo run:ios` locally (Xcode and
+CocoaPods are both present; `/ios` is gitignored, so prebuild output stays untracked).
+
+Worth noting for the Android side of the same gate: `eas.json`'s `development` profile is
+`ios.simulator: true`, so **EAS as configured cannot produce a physical-device build**, and
+internal distribution to real hardware needs the paid Apple account that §11.9 says is not
+enrolled. A local build with a free personal team is the only route to a physical device
+today. Since §11.1/§11.5/§11.6 all require real hardware — background geofencing and
+notification delivery are not simulator-testable — **the store enrollment in §11.9 blocks
+device QA too, not just submission.** That dependency was not previously recorded.
+
 ### Verified this session
 
 Against the local API (Go, Docker, listening on `*:8080`), with a throwaway account:
