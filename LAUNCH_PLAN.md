@@ -293,11 +293,14 @@ Branch: `day3/screen-consolidation-and-compliance`
 - Remove the broken `'/(auth)/index'` branches at `app/(auth)/login.tsx:9` and
   `app/(auth)/signup.tsx:11`, and narrow both `onNavigate` prop types.
 
-### 3.3 Account deletion (audit §4.1) — **blocked on backend**
+### 3.3 Account deletion (audit §4.1) — **client done, endpoint done, deploy pending**
 
-> **Action required outside this repo:** add `DELETE /api/auth/me` to the Railway API.
-> Escalate on day 1 — iOS cannot ship without it and it is the only external dependency
-> in this plan.
+> **Resolved 31 August 2026.** `DELETE /api/auth/me` exists on the local API and is
+> verified end-to-end (hard-deletes the user and their reminders; the email can be
+> reused). The client is wired to it via `EXPO_PUBLIC_USE_LOCAL_API=true`.
+>
+> **Action still required outside this repo:** deploy the API. Railway currently returns
+> `Application not found` for every route, so production has no working backend at all.
 
 - `authApi.deleteAccount()` in `lib/api/auth.api.ts`
 - Settings row with a confirmation dialog naming the consequence explicitly
@@ -402,7 +405,8 @@ live with testers opted in.
 | **SDK 57 upgrade breaks the build** | Day 1 lost, cascades into every other day | Verification gate in §1.1 before any other work; documented fallback to `expo-build-properties` on SDK 54 |
 | NativeWind breaks under RN 0.86 | Every screen loses styling | Check first when diagnosing; 4.2.6 declares no RN ceiling but hooks Babel/Metro |
 | Reanimated 4.1→4.5 / Worklets 0.5→0.10 regressions | Animations break across all screens | Explicit animation check in the §1.1 gate |
-| Backend `DELETE /api/auth/me` not delivered | Blocks iOS submission entirely | Escalate day 1; only external dependency |
+| ~~Backend `DELETE /api/auth/me` not delivered~~ | ~~Blocks iOS submission entirely~~ | **Closed 31 Aug** — endpoint exists and is verified locally |
+| **The API is not deployed** | Blocks *everything* — production cannot even sign in | Railway serves `Application not found`; redeploy the service and re-verify §3.3 against it |
 | Apple enrollment verification delayed | Pushes submission past day 6 | Enroll as individual; have ID ready |
 | Android channel cached from an old install | Alarm settings silently ignored in testing | New channel ID `proxi-alarm-v2` plus delete-old; test on a clean install |
 | Native geocoder autocomplete disappoints | Weakens core flow | `GeocodingProvider` interface makes Google Places a one-file swap |

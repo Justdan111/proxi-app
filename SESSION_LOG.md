@@ -9,6 +9,57 @@ blockers, and intent — the things that are not recoverable from the diff.
 
 ---
 
+## 2026-08-31 — Account deletion connected to the local API
+
+**Branch:** `fix/account-deletion-endpoint` (off `origin/main`) → no PR yet
+
+### Completed
+- **§4.1 is unblocked.** `DELETE /api/auth/me` now exists on the local backend
+  (Go, Docker, `*:8080`) and was verified end-to-end with a throwaway account:
+  `200 {"success":true,"message":"account deleted"}`, the account's reminders gone,
+  login `401`, and the same email re-registerable (`201`) — a hard delete, not a
+  deactivation. Repeating the `DELETE` is idempotent.
+- **Wired the app to it.** `resolveBaseUrl` in `lib/api/client.ts` checked
+  `EXPO_PUBLIC_API_URL` first, and `.env` ships the production URL — so
+  `EXPO_PUBLIC_USE_LOCAL_API` was dead code and every dev run hit Railway. The flag is
+  now checked first, still gated on `__DEV__`. Six precedence cases checked, including
+  that a release build can never resolve to a local host.
+- **Fixed a stranded-session bug the live endpoint exposed.** This backend answers
+  `GET /api/auth/me` with `404 "user not found"` — not `401` — once the account is gone,
+  and `GET /api/reminders` with `200 []`. The bootstrap in `context/authContext.tsx`
+  only cleared on `401`, so a token outliving its account left the user apparently
+  signed in against an empty account forever. It now treats `404` on that route as a
+  dead session and runs the full `clearLocalSession()` teardown.
+- Verification: `tsc --noEmit` clean; lint 5 problems, all pre-existing and none in the
+  two files touched.
+
+### Decisions made
+| Decision | Chosen | Rejected / why |
+|---|---|---|
+| Local API switch | Flag before `EXPO_PUBLIC_API_URL`, `__DEV__`-gated | Commenting the prod URL out of `.env` per run — fragile, and easy to commit or forget |
+| Deleted-account detection | `404` handled at bootstrap only | A global `404` rule in the interceptor — `404` legitimately means "no such reminder" elsewhere |
+| Teardown on a dead session | Reuse `clearLocalSession()` | The old inline token+user clear, which skipped the `proxi_*` AsyncStorage wipe and left geofencing running |
+
+### Found this session
+- **The production API is not deployed at all.** Railway returns
+  `{"status":"error","code":404,"message":"Application not found"}` with
+  `x-railway-fallback: true` for every route, `/api/auth/login` included. This is now
+  blocker #1 in `CLAUDE.md` — it is strictly larger than §4.1 was.
+
+### Blocked
+- Deploying the API. Until then the delete endpoint is verified locally only, and no
+  production build can sign in.
+- Both store accounts unenrolled; 12 Play testers not recruited (14-day clock unstarted).
+- No physical-device QA on SDK 57.
+
+### Next action
+**Deploy the backend to Railway, then re-verify deletion against production** — flip
+`EXPO_PUBLIC_USE_LOCAL_API=false` in `.env`, restart Metro with `-c`, and run the
+Settings → Delete Account flow on a device. Until the service is deployed, `.env` must
+stay on the local flag or the app has no working API at all.
+
+---
+
 ## 2026-08-30 — Both re-audit P1s fixed
 
 **Branch:** `fix/geofence-restart-and-activity-refresh` → PR #11 (open, awaiting review)

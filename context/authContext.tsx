@@ -80,10 +80,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await authApi.saveUser(me);
         setUser(me);
       } catch (err) {
-        // Only force logout when backend confirms token is invalid.
-        if (err instanceof AxiosError && err.response?.status === 401) {
-          await authApi.clearToken();
-          await authApi.clearUser();
+        // Only force logout when the backend confirms the session is over.
+        // 401 = token rejected. 404 on this route = the token authenticated
+        // fine but its user no longer exists, which is what a deleted account
+        // looks like from a second device, or from this one if the local
+        // teardown was interrupted. Anything else is transient — keep the
+        // cached session rather than signing a working account out.
+        const status = err instanceof AxiosError ? err.response?.status : undefined;
+        if (status === 401 || status === 404) {
+          await clearLocalSession();
           setUser(null);
         }
       }

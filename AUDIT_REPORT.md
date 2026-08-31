@@ -26,8 +26,11 @@ geofence visit instead of once per minute, and ships an in-app account-deletion 
 
 What stands between this and a submission is now almost entirely outside the repository:
 
-1. **A backend endpoint that does not exist.** `DELETE /api/auth/me` is required by Apple
-   guideline 5.1.1(v). The client is complete and returns 404. iOS cannot be submitted.
+1. **A backend that is deployed.** `DELETE /api/auth/me` now exists and is verified
+   end-to-end against a local instance of the API (31 August 2026) — it hard-deletes the
+   user and their reminders, and the email can be reused afterwards. But the Railway
+   production host answers every route with `Application not found`: the service is not
+   deployed, so *no* endpoint is reachable in production, not just this one.
 2. **Two store accounts that have not been created**, and **12 Play testers who have not
    been recruited** — a 14-day continuous closed test that no amount of engineering
    shortens.
@@ -60,9 +63,9 @@ unreachable.**
 |---|---|---|
 | Code complete | Engineering | **Done** — days 1–4 merged |
 | Device QA | A physical device; not compressible | **Not started** |
-| Account deletion working | Backend `DELETE /api/auth/me` | **Blocked** — endpoint does not exist |
+| Account deletion working | Backend `DELETE /api/auth/me` | **Works locally** — verified end-to-end 31 Aug; needs a production deploy |
 | Apple enrollment usable | 24–48h after applying | **Not started** |
-| iOS submitted | Active Apple account **and** the delete endpoint | Blocked on both |
+| iOS submitted | Active Apple account **and** the delete endpoint deployed | Blocked on both |
 | Play closed testing starts | Verified Play account + a build + 12 testers | **Not started** |
 | Play production access | **12 testers × 14 continuous days** | ~3 weeks after the test goes live |
 
@@ -87,19 +90,22 @@ what each day resolved; §13 is this re-audit.
 
 | § | Item | Why it blocks |
 |---|---|---|
-| **4.1** | `DELETE /api/auth/me` does not exist on the backend | **iOS cannot be submitted.** Apple 5.1.1(v). The client is complete — the Settings row, the confirmation and the teardown all work — and 404s until the endpoint ships. See the note below: this may be smaller than "blocked on the backend" suggests |
+| **4.1** | The API is not deployed — Railway returns `Application not found` for every route | **Nothing in production works**, sign-in included. `DELETE /api/auth/me` itself is done: it ships on the local API and is verified end-to-end (see §4.1). What blocks iOS now is deploying the service, not writing the route |
 | **11.9** | Neither store account is enrolled | Enrol with Apple as an **individual** — organization enrolment needs a D-U-N-S number and adds one to two weeks |
 | — | **12 Google Play testers are not recruited** | 12 testers × 14 **continuous** days of closed testing before a new personal account gets production access. Pure wall-clock, not work. The clock has not started, and this single item sets the Play date regardless of engineering. Aim for 15 — dropping below 12 restarts it |
 
-#### §4.1 is one route, and it may block both stores
+#### §4.1 was one route — it is written, and the blocker moved
 
-Two things this row has been understating.
+**The route exists and works.** Written against the project's own API and verified
+end-to-end on 31 August 2026: it hard-deletes the user with their reminders, refuses the
+old credentials, and frees the email for re-registration. It returns `200` with a JSON
+body rather than the `204` this report suggested; the client ignores the body, so that is
+a non-issue. Full evidence in §4.1.
 
-**It is probably not a cross-team dependency.** The API is the project's own Railway
-service. If the person writing it is the same person reading this, "blocked on the backend"
-means one route handler: authenticate from the same JWT, hard-delete the user together with
-their reminders and activity, invalidate the token, return `204`. Not a quarter's work — and
-it is the single thing standing between a finished app and an iOS submission.
+**The blocker moved rather than cleared.** Railway now serves
+`{"status":"error","code":404,"message":"Application not found"}` for every route,
+`/api/auth/login` included — the service is not deployed. Deletion cannot be verified
+against production, and neither can anything else, until it is.
 
 **It may not be Apple-only.** This report scopes account deletion to Apple 5.1.1(v), but
 Google Play also requires account deletion for apps that allow account creation, in-app and
@@ -392,14 +398,39 @@ through Focus modes, and is the correct level for this app. See §5.6.
 
 ## 4. Store Compliance Blockers
 
-### 4.1 No account deletion — P0, near-certain rejection
+### 4.1 Account deletion — P0, resolved locally, pending a production deploy
 Apple Guideline 5.1.1(v) requires any app offering account creation to also offer
-in-app account deletion. Proxi has signup but `app/(tab)/settings.tsx` provides
-only logout.
+in-app account deletion. The client flow (Settings row → confirmation → `authApi
+.deleteAccount()` → local teardown → login) has been complete since day 3.
 
-**This requires a backend change.** No `DELETE /api/auth/me` endpoint exists in
-[lib/api/auth.api.ts](lib/api/auth.api.ts), and the API is a separate service. The
-endpoint must be added server-side before the client work can be completed.
+**The endpoint now exists.** Verified on 31 August 2026 against a local instance of
+the API, with a throwaway account:
+
+| Check | Result |
+|---|---|
+| `DELETE /api/auth/me` with a valid JWT | `200 {"success":true,"message":"account deleted"}` |
+| The account's reminders afterwards | Gone — the list returns empty |
+| Logging in with the deleted credentials | `401` |
+| Signing up again with the same email | `201` — a hard delete, not a deactivation |
+| `DELETE` repeated with the same token | `200` — idempotent, no error path to handle |
+
+Two contract details the client had to be adapted to, both handled:
+
+- **`GET /api/auth/me` answers `404 "user not found"`, not `401`, once the account is
+  gone.** The bootstrap in `context/authContext.tsx` only cleared the session on `401`,
+  so a token that outlived its account left the user apparently signed in against an
+  empty account forever — the exact stranded state §3.6 was written to prevent. It now
+  treats `404` on that one route as a dead session. This matters for a second device,
+  and for this one if the local teardown is interrupted between the server's `200` and
+  the SecureStore wipe.
+- **`GET /api/reminders` with a deleted user's token answers `200 []`, not `401`**, so
+  nothing downstream trips the interceptor. Handling it at bootstrap covers this too.
+
+**What remains is deployment.** `https://proxi-api-production.up.railway.app` currently
+returns `{"status":"error","code":404,"message":"Application not found"}` with
+`x-railway-fallback: true` for *every* route including `/api/auth/login` — the service
+is not deployed at all. That is a larger problem than this row: a production build of
+the app today cannot sign in, let alone delete an account.
 
 ### 4.2 Missing `android.package` — P0
 [app.json](app.json) — Play Store release identity is incomplete. Cannot ship to Play.
@@ -826,7 +857,8 @@ No credential leaks found.
   moves to the first reminder save, with an explanation.
 
 **Still open after day 3:**
-- §4.1 — `DELETE /api/auth/me` does not exist. The client is complete and will 404.
+- §4.1 — `DELETE /api/auth/me` did not exist. **Resolved 31 August 2026** — the endpoint
+  ships on the local API and is verified end-to-end; what is left is deploying it.
 - §5.8 / §2.6 — the alarm sound is still the 3.36s chime.
 - §9.3 overnight timeframes, §9.4 activity feed noise, §6.2 `(tab)` naming — all
   explicitly out of scope for launch.
