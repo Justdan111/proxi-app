@@ -78,11 +78,11 @@ export default function AppLayout() {
         />
       </Tabs>
 
-      {/* Add reminder, hanging over the bar's top edge into the tab seam. */}
+      {/* Add reminder, sitting on the bar's top edge. */}
       <View
         style={{
           position: 'absolute',
-          bottom: BAR_HEIGHT + insets.bottom - FAB_SIZE * FAB_OVERLAP,
+          bottom: BAR_HEIGHT + insets.bottom,
           alignSelf: 'center',
           zIndex: 100,
         }}
@@ -99,8 +99,6 @@ export default function AppLayout() {
             height: FAB_SIZE,
             justifyContent: 'center',
             alignItems: 'center',
-            borderWidth: 4,
-            borderColor: isDark ? '#1a1a1a' : '#ffffff',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 6 },
             shadowOpacity: 0.35,
