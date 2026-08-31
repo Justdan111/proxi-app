@@ -448,7 +448,7 @@ export default function HomeScreen() {
               currentCoordinates={currentCoordinates}
             />
           )}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: 128 }}
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center py-12 px-6">
               <View className="bg-card dark:bg-card-dark rounded-3xl p-8 items-center w-full">
