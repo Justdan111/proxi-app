@@ -46,6 +46,37 @@ blockers, and intent — the things that are not recoverable from the diff.
   `x-railway-fallback: true` for every route, `/api/auth/login` included. This is now
   blocker #1 in `CLAUDE.md` — it is strictly larger than §4.1 was.
 
+### SDK 57 ran on a simulator for the first time
+The iOS dev client threw `[runtime not ready]: ReferenceError: Property 'MessageQueue'
+doesn't exist` on launch. Root cause: the only successful iOS build is from **20 April,
+SDK 54** — Metro was serving an RN 0.86 bridgeless bundle to an RN 0.81-era native runtime,
+and `MessageQueue` is the old bridge. Fingerprints differ (`1be15a66…` installed vs
+`e2e3873a…` current). Not a code defect and unrelated to the deletion work. Full evidence,
+including what was ruled out, in `AUDIT_REPORT.md` §14.5.
+
+Rebuilt with `npx expo run:ios --no-bundler` (Xcode 26.6, `/ios` is gitignored). Build
+succeeded, installed on the iPhone 17 Pro simulator, **and the app boots** — splash, router
+and auth screens all render. This is the first time the upgraded code has ever run.
+
+The signup screen reaches the local API and returns its errors, which confirms the §14.1
+wiring end to end from the UI, not just from `curl`.
+
+### Found while watching it run — not yet fixed
+- **Raw Go validator errors reach the user.** A short password renders as
+  `Key: 'SignupInput.Password' Error:Field validation for 'Password' failed on the 'min'
+  tag` in the signup error box. `getApiError` returns `response.data.error` verbatim
+  ([lib/api/errors.ts](lib/api/errors.ts)), which assumes the backend sends human copy;
+  this one sends struct-tag dumps naming internal Go fields.
+- **No client-side length validation.** `components/signUpScreen.tsx` checks only that the
+  two password fields match. The backend's real rules, probed directly: **password ≥ 6,
+  name ≥ 2**. Nothing enforces either before the request.
+- A transient **Unmatched Route** screen appears at `proxi:///` on cold launch before the
+  redirect resolves. There is no `app/index.tsx`; `RootNavigator` redirects instead. Worth
+  confirming whether it is only a flash.
+- Legacy AsyncStorage key `cachedReminders` (no `proxi_` prefix) survives in the simulator
+  from an April build, holding another account's reminder data. `clearLocalSession()` wipes
+  `proxi_*` only, so logout and account deletion would both leave it behind.
+
 ### Blocked
 - Deploying the API. Until then the delete endpoint is verified locally only, and no
   production build can sign in.
@@ -53,7 +84,12 @@ blockers, and intent — the things that are not recoverable from the diff.
 - No physical-device QA on SDK 57.
 
 ### Next action
-**Deploy the backend to Railway, then re-verify deletion against production** — flip
+**Run Settings → Delete Account on the simulator against the local API.** The client is
+now the only unverified half; the endpoint is proven. Create an account (password ≥ 6),
+add a reminder, delete the account, and confirm the app lands on login with storage
+cleared. Then decide on the two signup defects above.
+
+After that: **deploy the backend to Railway and re-verify deletion against production** — flip
 `EXPO_PUBLIC_USE_LOCAL_API=false` in `.env`, restart Metro with `-c`, and run the
 Settings → Delete Account flow on a device. Until the service is deployed, `.env` must
 stay on the local flag or the app has no working API at all.
