@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  FlatList, ActivityIndicator, SafeAreaView,
+  FlatList, ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import { debounce } from 'lodash';
@@ -215,7 +216,7 @@ export default function LocationPickerScreen() {
       {/* Map */}
       <View className="mx-5 rounded-[20px] overflow-hidden border border-border dark:border-border-dark">
         {locating ? (
-          <View className="h-[320px] items-center justify-center gap-3 bg-card dark:bg-card-dark">
+          <View className="h-[500px] items-center justify-center gap-3 bg-card dark:bg-card-dark">
             <ActivityIndicator size="large" color={ACCENT} />
             <Text className="text-[13px] text-muted-foreground dark:text-muted-foreground-dark">
               Getting your location...
@@ -226,7 +227,7 @@ export default function LocationPickerScreen() {
             center={selected}
             radius={300}
             onLocationSelect={handleMapTap}
-            height={320}
+            height={500}
           />
         ) : null}
       </View>

@@ -105,6 +105,12 @@ These cost real time to discover. Do not rediscover them.
   geofence task; the notification vibration pattern is the only tactile channel then.
 - **`npx tsc --noEmit` errors under `lib/simulation/`** are pre-existing archived code,
   not regressions. `app.config.ts` has one known `ExpoConfig.name` error.
+- **To run against the local API, set `EXPO_PUBLIC_USE_LOCAL_API=true` in `.env` and
+  restart Metro with `npx expo start -c`.** `EXPO_PUBLIC_*` values are inlined at bundle
+  time, so a plain reload keeps the old URL. The flag is checked *before*
+  `EXPO_PUBLIC_API_URL` (which ships the production URL) and is ignored outside `__DEV__`,
+  so a release build can never point at a laptop. The port is 8080 and the host comes from
+  Metro's `hostUri`, which is what lets a physical device on the same LAN reach it.
 - **`EXPO_PUBLIC_*` env vars are embedded in the built bundle.** Never put a secret
   behind that prefix. The Android Google Maps key must be restricted by package name
   and SHA-1 in Google Cloud Console.
@@ -128,8 +134,10 @@ alternative. Full reasoning in `AUDIT_REPORT.md` §5.
 
 Raise these early; none can be fixed by writing code here.
 
-1. **`DELETE /api/auth/me` does not exist** on the backend. Apple 5.1.1(v) requires
-   in-app account deletion. iOS cannot ship without it.
+1. **The API is not deployed.** `proxi-api-production.up.railway.app` returns
+   `Application not found` for every route — production cannot sign in. `DELETE
+   /api/auth/me` itself is **no longer a blocker**: it exists and is verified end-to-end
+   against a local instance (31 Aug 2026). Deploying the service is what remains.
 2. **Neither store account is enrolled.** Apple: enroll as *individual* (organization
    needs a D-U-N-S number, +1–2 weeks).
 3. **Google Play needs 12 testers × 14 continuous days** of closed testing before a new

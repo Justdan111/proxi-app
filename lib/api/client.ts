@@ -4,6 +4,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 const DEFAULT_PROD_URL = 'https://proxi-api-production.up.railway.app';
+const LOCAL_API_PORT = 8080;
 const USE_LOCAL_API = process.env.EXPO_PUBLIC_USE_LOCAL_API === 'true';
 
 function getExpoHost() {
@@ -17,22 +18,28 @@ function getExpoHost() {
   return host;
 }
 
+// The dev machine hosts both Metro and the local API, so Metro's host is the
+// API's host too — that is what makes a physical device reach it over the LAN.
+function resolveLocalUrl() {
+  const expoHost = getExpoHost();
+  if (expoHost) return `http://${expoHost}:${LOCAL_API_PORT}`;
+
+  if (Platform.OS === 'android') return `http://10.0.2.2:${LOCAL_API_PORT}`;
+
+  return `http://localhost:${LOCAL_API_PORT}`;
+}
+
 function resolveBaseUrl() {
+  // Checked before EXPO_PUBLIC_API_URL: `.env` ships the production URL, so the
+  // opposite order leaves the flag unreachable and every local run hits Railway.
+  // In Expo Go, auto-detecting a local API host often points to a non-API service,
+  // which surfaces as 404 "Not found" during auth calls — hence the explicit flag.
+  if (__DEV__ && USE_LOCAL_API) return resolveLocalUrl();
+
   const configuredUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
   if (configuredUrl) return configuredUrl;
 
-  if (!__DEV__) return DEFAULT_PROD_URL;
-
-  // In Expo Go, auto-detecting a local API host often points to a non-API service,
-  // which surfaces as 404 "Not found" during auth calls.
-  if (!USE_LOCAL_API) return DEFAULT_PROD_URL;
-
-  const expoHost = getExpoHost();
-  if (expoHost) return `http://${expoHost}:8080`;
-
-  if (Platform.OS === 'android') return 'http://10.0.2.2:8080';
-
-  return 'http://localhost:8080';
+  return DEFAULT_PROD_URL;
 }
 
 const BASE_URL = resolveBaseUrl();

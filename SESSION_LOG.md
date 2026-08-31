@@ -9,6 +9,93 @@ blockers, and intent — the things that are not recoverable from the diff.
 
 ---
 
+## 2026-08-31 — Account deletion connected to the local API
+
+**Branch:** `fix/account-deletion-endpoint` (off `origin/main`) → no PR yet
+
+### Completed
+- **§4.1 is unblocked.** `DELETE /api/auth/me` now exists on the local backend
+  (Go, Docker, `*:8080`) and was verified end-to-end with a throwaway account:
+  `200 {"success":true,"message":"account deleted"}`, the account's reminders gone,
+  login `401`, and the same email re-registerable (`201`) — a hard delete, not a
+  deactivation. Repeating the `DELETE` is idempotent.
+- **Wired the app to it.** `resolveBaseUrl` in `lib/api/client.ts` checked
+  `EXPO_PUBLIC_API_URL` first, and `.env` ships the production URL — so
+  `EXPO_PUBLIC_USE_LOCAL_API` was dead code and every dev run hit Railway. The flag is
+  now checked first, still gated on `__DEV__`. Six precedence cases checked, including
+  that a release build can never resolve to a local host.
+- **Fixed a stranded-session bug the live endpoint exposed.** This backend answers
+  `GET /api/auth/me` with `404 "user not found"` — not `401` — once the account is gone,
+  and `GET /api/reminders` with `200 []`. The bootstrap in `context/authContext.tsx`
+  only cleared on `401`, so a token outliving its account left the user apparently
+  signed in against an empty account forever. It now treats `404` on that route as a
+  dead session and runs the full `clearLocalSession()` teardown.
+- Verification: `tsc --noEmit` clean; lint 5 problems, all pre-existing and none in the
+  two files touched.
+
+### Decisions made
+| Decision | Chosen | Rejected / why |
+|---|---|---|
+| Local API switch | Flag before `EXPO_PUBLIC_API_URL`, `__DEV__`-gated | Commenting the prod URL out of `.env` per run — fragile, and easy to commit or forget |
+| Deleted-account detection | `404` handled at bootstrap only | A global `404` rule in the interceptor — `404` legitimately means "no such reminder" elsewhere |
+| Teardown on a dead session | Reuse `clearLocalSession()` | The old inline token+user clear, which skipped the `proxi_*` AsyncStorage wipe and left geofencing running |
+
+### Found this session
+- **The production API is not deployed at all.** Railway returns
+  `{"status":"error","code":404,"message":"Application not found"}` with
+  `x-railway-fallback: true` for every route, `/api/auth/login` included. This is now
+  blocker #1 in `CLAUDE.md` — it is strictly larger than §4.1 was.
+
+### SDK 57 ran on a simulator for the first time
+The iOS dev client threw `[runtime not ready]: ReferenceError: Property 'MessageQueue'
+doesn't exist` on launch. Root cause: the only successful iOS build is from **20 April,
+SDK 54** — Metro was serving an RN 0.86 bridgeless bundle to an RN 0.81-era native runtime,
+and `MessageQueue` is the old bridge. Fingerprints differ (`1be15a66…` installed vs
+`e2e3873a…` current). Not a code defect and unrelated to the deletion work. Full evidence,
+including what was ruled out, in `AUDIT_REPORT.md` §14.5.
+
+Rebuilt with `npx expo run:ios --no-bundler` (Xcode 26.6, `/ios` is gitignored). Build
+succeeded, installed on the iPhone 17 Pro simulator, **and the app boots** — splash, router
+and auth screens all render. This is the first time the upgraded code has ever run.
+
+The signup screen reaches the local API and returns its errors, which confirms the §14.1
+wiring end to end from the UI, not just from `curl`.
+
+### Found while watching it run — not yet fixed
+- **Raw Go validator errors reach the user.** A short password renders as
+  `Key: 'SignupInput.Password' Error:Field validation for 'Password' failed on the 'min'
+  tag` in the signup error box. `getApiError` returns `response.data.error` verbatim
+  ([lib/api/errors.ts](lib/api/errors.ts)), which assumes the backend sends human copy;
+  this one sends struct-tag dumps naming internal Go fields.
+- **No client-side length validation.** `components/signUpScreen.tsx` checks only that the
+  two password fields match. The backend's real rules, probed directly: **password ≥ 6,
+  name ≥ 2**. Nothing enforces either before the request.
+- A transient **Unmatched Route** screen appears at `proxi:///` on cold launch before the
+  redirect resolves. There is no `app/index.tsx`; `RootNavigator` redirects instead. Worth
+  confirming whether it is only a flash.
+- Legacy AsyncStorage key `cachedReminders` (no `proxi_` prefix) survives in the simulator
+  from an April build, holding another account's reminder data. `clearLocalSession()` wipes
+  `proxi_*` only, so logout and account deletion would both leave it behind.
+
+### Blocked
+- Deploying the API. Until then the delete endpoint is verified locally only, and no
+  production build can sign in.
+- Both store accounts unenrolled; 12 Play testers not recruited (14-day clock unstarted).
+- No physical-device QA on SDK 57.
+
+### Next action
+**Run Settings → Delete Account on the simulator against the local API.** The client is
+now the only unverified half; the endpoint is proven. Create an account (password ≥ 6),
+add a reminder, delete the account, and confirm the app lands on login with storage
+cleared. Then decide on the two signup defects above.
+
+After that: **deploy the backend to Railway and re-verify deletion against production** — flip
+`EXPO_PUBLIC_USE_LOCAL_API=false` in `.env`, restart Metro with `-c`, and run the
+Settings → Delete Account flow on a device. Until the service is deployed, `.env` must
+stay on the local flag or the app has no working API at all.
+
+---
+
 ## 2026-08-30 — Both re-audit P1s fixed
 
 **Branch:** `fix/geofence-restart-and-activity-refresh` → PR #11 (open, awaiting review)

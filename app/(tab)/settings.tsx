@@ -4,13 +4,13 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   Switch,
   Image,
   Alert,
   AppState,
   Linking,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,

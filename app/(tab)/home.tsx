@@ -1,6 +1,7 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { ActivityIndicator, View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, SafeAreaView, Modal, Alert, } from 'react-native';
+import { ActivityIndicator, View, Text, FlatList, TextInput, TouchableOpacity, RefreshControl, Modal, Alert, } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, withSpring, Easing, FadeInDown, FadeIn, } from 'react-native-reanimated';
 import { Search, MapPin, Plus, Check, Trash2 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -447,7 +448,7 @@ export default function HomeScreen() {
               currentCoordinates={currentCoordinates}
             />
           )}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: 128 }}
           ListEmptyComponent={
             <View className="flex-1 items-center justify-center py-12 px-6">
               <View className="bg-card dark:bg-card-dark rounded-3xl p-8 items-center w-full">

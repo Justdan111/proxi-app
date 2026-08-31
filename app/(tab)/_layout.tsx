@@ -1,12 +1,21 @@
 import { Tabs, useRouter } from 'expo-router';
 import { Home, Clock, Settings, Plus } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/themeContext';
 import { ACCENT } from '@/lib/theme';
 import { View, TouchableOpacity } from 'react-native';
 
+// The bar is docked to the bottom edge. The add button sits above it rather
+// than on it: with three tabs the centre slot is Activity, so anything centred
+// on the bar covers that label. FAB_GAP is the air between the two.
+const BAR_HEIGHT = 70;
+const FAB_SIZE = 60;
+const FAB_GAP = 12;
+
 export default function AppLayout() {
   const { isDark } = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
     <View style={{ flex: 1 }}>
@@ -19,8 +28,8 @@ export default function AppLayout() {
             backgroundColor: isDark ? '#1a1a1a' : '#ffffff',
             borderTopColor: isDark ? '#2a2a2a' : '#e5e7eb',
             borderTopWidth: 1,
-            height: 70,
-            paddingBottom: 8,
+            height: BAR_HEIGHT + insets.bottom,
+            paddingBottom: insets.bottom + 8,
           },
           tabBarLabelStyle: {
             fontSize: 11,
@@ -43,8 +52,6 @@ export default function AppLayout() {
             title: 'Activity',
             tabBarLabel: 'Activity',
             tabBarIcon: ({ color, size }) => <Clock color={color} size={size} />,
-            // The margins that used to sit here existed only to dodge the
-            // floating action button between four tabs. Three tabs clear it.
           }}
         />
         <Tabs.Screen
@@ -57,35 +64,37 @@ export default function AppLayout() {
         />
       </Tabs>
 
-      {/* Floating Action Button */}
+      {/* Add reminder. Cleared of the bar so every label stays readable. */}
       <View
         style={{
           position: 'absolute',
-          bottom: 25,
+          bottom: BAR_HEIGHT + insets.bottom + FAB_GAP,
           alignSelf: 'center',
           zIndex: 100,
         }}
       >
         <TouchableOpacity
           onPress={() => router.push('/add-reminder')}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Add reminder"
           style={{
             backgroundColor: ACCENT,
-            borderRadius: 32,
-            width: 64,
-            height: 64,
+            borderRadius: FAB_SIZE / 2,
+            width: FAB_SIZE,
+            height: FAB_SIZE,
             justifyContent: 'center',
             alignItems: 'center',
-            borderWidth: 4,
-            borderColor: isDark ? '#1a1a1a' : '#ffffff',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 6 },
             shadowOpacity: 0.35,
-            shadowRadius: 10,
+            shadowRadius: 12,
             elevation: 12,
           }}
         >
-          <Plus size={30} color="#ffffff" strokeWidth={2.5} />
+          {/* Near-black on mint, per the palette's own accent-foreground.
+              White on #00D4AA is about 1.9:1 and fails contrast. */}
+          <Plus size={28} color="#0a0a0a" strokeWidth={2.5} />
         </TouchableOpacity>
       </View>
     </View>

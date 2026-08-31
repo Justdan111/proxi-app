@@ -26,8 +26,11 @@ geofence visit instead of once per minute, and ships an in-app account-deletion 
 
 What stands between this and a submission is now almost entirely outside the repository:
 
-1. **A backend endpoint that does not exist.** `DELETE /api/auth/me` is required by Apple
-   guideline 5.1.1(v). The client is complete and returns 404. iOS cannot be submitted.
+1. **A backend that is deployed.** `DELETE /api/auth/me` now exists and is verified
+   end-to-end against a local instance of the API (31 August 2026) — it hard-deletes the
+   user and their reminders, and the email can be reused afterwards. But the Railway
+   production host answers every route with `Application not found`: the service is not
+   deployed, so *no* endpoint is reachable in production, not just this one.
 2. **Two store accounts that have not been created**, and **12 Play testers who have not
    been recruited** — a 14-day continuous closed test that no amount of engineering
    shortens.
@@ -54,15 +57,23 @@ Both illustrate the same thing, and it is the reason the device pass matters mor
 another reading of the code: **fixing one defect can expose another that was previously
 unreachable.**
 
+The 31 August session (§14) is the same pattern once more. Connecting account deletion to a
+backend that finally answers exposed two defects that could not have been found by reading
+the client alone — a local-API switch that had never once worked (§14.1), and a deleted
+account leaving the session alive indefinitely because this API returns `404` where the
+client only handled `401` (§14.2). Both are fixed. The map stack was re-examined in the
+same session and the day-1 decision stands (§5.1); the live-location question underneath it
+is §14.4, and it is not a map question.
+
 ### Timeline reality
 
 | Milestone | Blocking factor | Status |
 |---|---|---|
 | Code complete | Engineering | **Done** — days 1–4 merged |
 | Device QA | A physical device; not compressible | **Not started** |
-| Account deletion working | Backend `DELETE /api/auth/me` | **Blocked** — endpoint does not exist |
+| Account deletion working | Backend `DELETE /api/auth/me` | **Works locally** — verified end-to-end 31 Aug; needs a production deploy |
 | Apple enrollment usable | 24–48h after applying | **Not started** |
-| iOS submitted | Active Apple account **and** the delete endpoint | Blocked on both |
+| iOS submitted | Active Apple account **and** the delete endpoint deployed | Blocked on both |
 | Play closed testing starts | Verified Play account + a build + 12 testers | **Not started** |
 | Play production access | **12 testers × 14 continuous days** | ~3 weeks after the test goes live |
 
@@ -87,19 +98,22 @@ what each day resolved; §13 is this re-audit.
 
 | § | Item | Why it blocks |
 |---|---|---|
-| **4.1** | `DELETE /api/auth/me` does not exist on the backend | **iOS cannot be submitted.** Apple 5.1.1(v). The client is complete — the Settings row, the confirmation and the teardown all work — and 404s until the endpoint ships. See the note below: this may be smaller than "blocked on the backend" suggests |
+| **4.1** | The API is not deployed — Railway returns `Application not found` for every route | **Nothing in production works**, sign-in included. `DELETE /api/auth/me` itself is done: it ships on the local API and is verified end-to-end (see §4.1). What blocks iOS now is deploying the service, not writing the route |
 | **11.9** | Neither store account is enrolled | Enrol with Apple as an **individual** — organization enrolment needs a D-U-N-S number and adds one to two weeks |
 | — | **12 Google Play testers are not recruited** | 12 testers × 14 **continuous** days of closed testing before a new personal account gets production access. Pure wall-clock, not work. The clock has not started, and this single item sets the Play date regardless of engineering. Aim for 15 — dropping below 12 restarts it |
 
-#### §4.1 is one route, and it may block both stores
+#### §4.1 was one route — it is written, and the blocker moved
 
-Two things this row has been understating.
+**The route exists and works.** Written against the project's own API and verified
+end-to-end on 31 August 2026: it hard-deletes the user with their reminders, refuses the
+old credentials, and frees the email for re-registration. It returns `200` with a JSON
+body rather than the `204` this report suggested; the client ignores the body, so that is
+a non-issue. Full evidence in §4.1.
 
-**It is probably not a cross-team dependency.** The API is the project's own Railway
-service. If the person writing it is the same person reading this, "blocked on the backend"
-means one route handler: authenticate from the same JWT, hard-delete the user together with
-their reminders and activity, invalidate the token, return `204`. Not a quarter's work — and
-it is the single thing standing between a finished app and an iOS submission.
+**The blocker moved rather than cleared.** Railway now serves
+`{"status":"error","code":404,"message":"Application not found"}` for every route,
+`/api/auth/login` included — the service is not deployed. Deletion cannot be verified
+against production, and neither can anything else, until it is.
 
 **It may not be Apple-only.** This report scopes account deletion to Apple 5.1.1(v), but
 Google Play also requires account deletion for apps that allow account creation, in-app and
@@ -313,13 +327,17 @@ console.log('Marked done:', reminderId);
 
 Tapping Done does nothing. Reviewer-visible incomplete functionality.
 
-### 3.6 Expired sessions strand the user — P1
+### 3.6 Expired sessions strand the user — P1 — **RESOLVED, then widened (§14.2)**
 [lib/api/client.ts:65](lib/api/client.ts#L65)
 
 The 401 interceptor deletes the token but has no channel back to `authContext`.
 `user` stays populated and `isAuthenticated` stays `true`, so the user remains on
 a home screen where every request fails, with no path to re-authenticate short of
 force-quitting the app.
+
+Fixed on day 3 by `setUnauthorizedHandler`. **A second route into the same dead end
+was found on 31 August** once a real deletion endpoint existed: a *deleted* account
+produces `404`, not `401`, so none of this machinery fired. See §14.2.
 
 ### 3.7 Location handoff is racy and drops the icon — P1
 [app/location-picker.tsx:1062](app/location-picker.tsx#L1062)
@@ -392,14 +410,39 @@ through Focus modes, and is the correct level for this app. See §5.6.
 
 ## 4. Store Compliance Blockers
 
-### 4.1 No account deletion — P0, near-certain rejection
+### 4.1 Account deletion — P0, resolved locally, pending a production deploy
 Apple Guideline 5.1.1(v) requires any app offering account creation to also offer
-in-app account deletion. Proxi has signup but `app/(tab)/settings.tsx` provides
-only logout.
+in-app account deletion. The client flow (Settings row → confirmation → `authApi
+.deleteAccount()` → local teardown → login) has been complete since day 3.
 
-**This requires a backend change.** No `DELETE /api/auth/me` endpoint exists in
-[lib/api/auth.api.ts](lib/api/auth.api.ts), and the API is a separate service. The
-endpoint must be added server-side before the client work can be completed.
+**The endpoint now exists.** Verified on 31 August 2026 against a local instance of
+the API, with a throwaway account:
+
+| Check | Result |
+|---|---|
+| `DELETE /api/auth/me` with a valid JWT | `200 {"success":true,"message":"account deleted"}` |
+| The account's reminders afterwards | Gone — the list returns empty |
+| Logging in with the deleted credentials | `401` |
+| Signing up again with the same email | `201` — a hard delete, not a deactivation |
+| `DELETE` repeated with the same token | `200` — idempotent, no error path to handle |
+
+Two contract details the client had to be adapted to, both handled:
+
+- **`GET /api/auth/me` answers `404 "user not found"`, not `401`, once the account is
+  gone.** The bootstrap in `context/authContext.tsx` only cleared the session on `401`,
+  so a token that outlived its account left the user apparently signed in against an
+  empty account forever — the exact stranded state §3.6 was written to prevent. It now
+  treats `404` on that one route as a dead session. This matters for a second device,
+  and for this one if the local teardown is interrupted between the server's `200` and
+  the SecureStore wipe.
+- **`GET /api/reminders` with a deleted user's token answers `200 []`, not `401`**, so
+  nothing downstream trips the interceptor. Handling it at bootstrap covers this too.
+
+**What remains is deployment.** `https://proxi-api-production.up.railway.app` currently
+returns `{"status":"error","code":404,"message":"Application not found"}` with
+`x-railway-fallback: true` for *every* route including `/api/auth/login` — the service
+is not deployed at all. That is a larger problem than this row: a production build of
+the app today cannot sign in, let alone delete an account.
 
 ### 4.2 Missing `android.package` — P0
 [app.json](app.json) — Play Store release identity is incomplete. Cannot ship to Play.
@@ -474,6 +517,42 @@ Rationale:
 `expo-maps` was evaluated and **rejected**: it is still alpha ("subject to breaking
 changes"), unavailable in Expo Go, and requires a **minimum deployment target of
 iOS 18.0**, which would exclude a large share of devices.
+
+#### Re-confirmed 31 August 2026, with the migration already merged
+
+The Mapbox question was raised again. The state of the code answers most of it: the
+migration shipped on day 1 and `grep -r mapbox` across the source returns **nothing**.
+`components/maps/ReminderMap.tsx:30` renders Apple Maps on iOS (`provider={undefined}`)
+and Google Maps on Android (`PROVIDER_GOOGLE`). Re-adding Mapbox means reverting merged,
+reviewed work.
+
+The decision holds, for reasons specific to what this app asks of a map:
+
+| | `react-native-maps` (current) | `@rnmapbox/maps` |
+|---|---|---|
+| iOS key / billing | **None** — Apple Maps is native | Token required, billed by map load |
+| Android key | Google free-tier key | Second token; **also** a `MAPBOX_DOWNLOADS_TOKEN` at build time |
+| Build cost | No extra native SDK | ~4 MB+ binary, and the download token gated device builds until it was removed |
+| Radius circle | Native `<Circle radius={meters}>` — fixed §5.3 | Manual `ShapeSource` + `CircleLayer` geometry |
+| Custom cartography, offline tiles | Not offered | **Genuinely better** |
+| Live location accuracy | *Not a map concern — see below* | *Not a map concern* |
+
+Mapbox wins on custom styling and offline tiles. Proxi displays a pin, a radius circle,
+and a tap target — it uses neither. The one previously recorded strike against Mapbox
+(geocoding accuracy, §5.2) also still stands, and geocoding has since moved behind
+`GeocodingProvider` anyway.
+
+**The map renderer has nothing to do with live location.** Position, background tracking
+and geofence evaluation come from `expo-location` and `expo-task-manager`
+([lib/location/geofencing.ts:265](lib/location/geofencing.ts#L265)); the map is a display
+surface that draws a coordinate someone else produced. Swapping renderers would not change
+accuracy, battery use, or background reliability by any amount. The live-location question
+that *is* real is §14.4.
+
+**If the Android map looks blank, that is not the renderer.**
+`GOOGLE_MAPS_ANDROID_API_KEY` is still unset in `.env`, which
+[app.config.ts](app.config.ts) warns about at config time. Mapbox would not fix this —
+it would replace one missing token with two.
 
 ### 5.2 Geocoding
 Place search and reverse geocoding move to **expo-location's native geocoder**
@@ -826,7 +905,8 @@ No credential leaks found.
   moves to the first reminder save, with an explanation.
 
 **Still open after day 3:**
-- §4.1 — `DELETE /api/auth/me` does not exist. The client is complete and will 404.
+- §4.1 — `DELETE /api/auth/me` did not exist. **Resolved 31 August 2026** — the endpoint
+  ships on the local API and is verified end-to-end; what is left is deploying it.
 - §5.8 / §2.6 — the alarm sound is still the 3.36s chime.
 - §9.3 overnight timeframes, §9.4 activity feed noise, §6.2 `(tab)` naming — all
   explicitly out of scope for launch.
@@ -1105,3 +1185,215 @@ reach any of §13.1 through §13.4 — three of the four were found by reading, 
 concurrency race fixed on `fix/geofence-concurrency` needed two background tasks in view at
 once to see at all. Until `release/DEVICE_QA.md` has been run on hardware, every behavioural
 claim in this document is *implemented and unverified*.
+
+## 14. Session Findings — 31 August 2026
+
+The session that connected account deletion to a real backend. Two of the three defects
+below were **invisible until the endpoint existed** — the client had been written against
+an endpoint nobody could call, so its error handling had never met a real response.
+
+### 14.1 The local-API switch was unreachable — P1 — **RESOLVED**
+
+[lib/api/client.ts:32](lib/api/client.ts#L32)
+
+`resolveBaseUrl` read `EXPO_PUBLIC_API_URL` first and returned on the first non-empty
+value. `.env` ships the production URL, so the branch below it — the whole
+`EXPO_PUBLIC_USE_LOCAL_API` path, including the emulator and LAN host resolution — was
+dead code. **Every development run hit Railway**, and the only way to reach a local API
+was to comment the production URL out of `.env` and remember to put it back.
+
+The flag is now checked first and remains gated on `__DEV__`, so a release build cannot
+resolve to a developer's laptop regardless of what `.env` says. Six precedence cases were
+checked, including that gate.
+
+*Not a regression — the flag had never worked since it was introduced.*
+
+### 14.2 A deleted account left the session alive forever — P1 — **RESOLVED**
+
+[context/authContext.tsx:82](context/authContext.tsx#L82)
+
+The bootstrap cleared the session only on `401`. The backend answers `GET /api/auth/me`
+with **`404 "user not found"`** once the account is gone — the token is still perfectly
+valid, it is the user that no longer exists — so nothing fired. The app kept its cached
+user, `isAuthenticated` stayed `true`, and the account appeared to be signed in against
+permanently empty data. `GET /api/reminders` compounds it: with a deleted user's token it
+returns **`200 []`**, not `401`, so no downstream call trips the interceptor either.
+
+Two ordinary paths reach this state:
+
+1. Delete the account on one device — every other signed-in device stays "logged in".
+2. Delete it on *this* device and lose the app between the server's `200` and the
+   SecureStore wipe. The teardown is not atomic and cannot be.
+
+`404` on that one route is now treated as a dead session, running the full
+`clearLocalSession()` teardown rather than the previous inline token+user clear — so the
+`proxi_*` AsyncStorage keys are wiped and geofencing is stopped, which the old path
+skipped. The rule is deliberately scoped to `/api/auth/me`: `404` elsewhere legitimately
+means "no such reminder".
+
+*This is §3.6's failure mode arriving through a different status code.*
+
+### 14.3 The production API is not deployed — P0, external
+
+`https://proxi-api-production.up.railway.app` returns
+
+```json
+{"status":"error","code":404,"message":"Application not found"}
+```
+
+with `x-railway-fallback: true`, for **every** route — `/api/auth/login` included. This is
+Railway's edge answering for a service that is not there, not the API returning 404.
+
+This supersedes the old §4.1 blocker and is strictly larger than it. A production build
+today cannot sign in, so no store submission and no external tester build is possible,
+whatever the app binary does. §4.1's endpoint is written and verified; it is verified
+*locally*, and stays that way until something is deployed.
+
+### 14.4 Location tracking is continuous updates, not OS geofences — P2
+
+[lib/location/geofencing.ts:265](lib/location/geofencing.ts#L265)
+
+The real live-location question, and unrelated to the map stack (§5.1).
+
+`startGeofencing` calls `Location.startLocationUpdatesAsync` with
+`Accuracy.Balanced`, `distanceInterval: 50`, `timeInterval: 60000`, then evaluates every
+fence in JS with `getDistanceMetres`. It does **not** use `startGeofencingAsync`, which
+hands regions to the OS.
+
+The trade-off, stated plainly because it is a real fork and neither side is free:
+
+| | Current — continuous updates | `startGeofencingAsync` — OS regions |
+|---|---|---|
+| Battery | App wakes on a distance/time cadence regardless of proximity | OS-scheduled; it already knows where the user is |
+| Region limit | Unlimited | **20 on iOS**, 100 on Android |
+| Latency | Bounded by the interval | Faster, and OS-optimised |
+| Control | Full — hysteresis, timeframes, per-visit state all live in our code | Coarse enter/exit events only |
+| Android UX | Requires the persistent foreground-service notification | No permanent notification |
+
+The current design bought §3.1's fix: `EXIT_HYSTERESIS`, per-visit `notified` state, and
+timeframe-aware alerts are all logic the OS geofence API cannot express. That was the
+right call and it should not be undone casually.
+
+But it is worth knowing that the app pays a continuous background-location cost for it,
+and that the cost is **the thing users notice** — the Android foreground-service
+notification is permanent, and iOS shows the blue bar
+(`showsBackgroundLocationIndicator: true`). §13.2 already flags the worst case: this runs
+even with nothing to watch.
+
+**No change recommended before launch.** Device QA measures whether battery drain is
+actually a problem; changing the tracking model on the assumption that it is, days before
+a submission, trades a known system for an unknown one. Revisit with §13.2 and with real
+battery numbers from `release/DEVICE_QA.md`.
+
+### 14.5 The iOS dev client predates the SDK 57 upgrade — P1, and it is why device QA never happened
+
+Symptom, on launch, before any UI:
+
+```
+[runtime not ready]: ReferenceError: Property 'MessageQueue' doesn't exist
+```
+
+with a stack of nothing but `metroRequire` / `guardedLoadModule` frames — a failure during
+module load, before React starts.
+
+**Root cause.** The only successful iOS dev-client build (`eas build:list`) is from
+**20 April 2026 against SDK 54.0.0**, commit `2eb5dcc` — before the day-1 upgrade. The
+project is now SDK 57 / RN 0.86. Metro serves an RN 0.86 bundle to an RN 0.81-era native
+runtime. RN 0.86 is bridgeless by default; the SDK 54 client expects the old bridge, and
+`MessageQueue` / `__fbBatchedBridge` **is** that bridge.
+
+Fingerprints confirm it:
+
+| | Fingerprint |
+|---|---|
+| Installed dev client (April, SDK 54) | `1be15a663b52fc6c4062b59e0c9e480266c63f33` |
+| Current project (SDK 57) | `e2e3873a4a264e264fe2130984e3f917c2b6b591` |
+
+**Ruled out, with evidence, so no one re-runs this:**
+- *Not a bundling failure.* Metro completes cleanly — 3,679 modules, no error.
+- *Not app code, and not a library.* Every `MessageQueue` occurrence in the served bundle
+  is a local `var` inside RN's own `BatchedBridge/MessageQueue.js` (module 25). Nothing in
+  the bundle reads it as a global; the bad reference comes from the mismatched native side.
+- *Not Metro cache corruption.* `MessageQueue.js` depending on module ids 3679/3680 looks
+  wrong for a graph of 3,679 modules, but those resolve to `@babel/runtime` helpers
+  `classCallCheck` and `createClass`. The graph is sound.
+- *Not the account-deletion work.* That touched two files, neither loaded at bridge setup.
+
+**Why this matters beyond one error.** This is the mechanical reason the §1.1 verification
+gate has stayed open since day 1 and every behavioural claim in this report is still
+*implemented and unverified*: **the app on the simulator has never once run the upgraded
+code.** No amount of reading finds a defect that only appears when SDK 57 actually boots.
+
+**Fix.** Rebuild the dev client on SDK 57 — `npx expo run:ios` locally (Xcode and
+CocoaPods are both present; `/ios` is gitignored, so prebuild output stays untracked).
+
+Worth noting for the Android side of the same gate: `eas.json`'s `development` profile is
+`ios.simulator: true`, so **EAS as configured cannot produce a physical-device build**, and
+internal distribution to real hardware needs the paid Apple account that §11.9 says is not
+enrolled. A local build with a free personal team is the only route to a physical device
+today. Since §11.1/§11.5/§11.6 all require real hardware — background geofencing and
+notification delivery are not simulator-testable — **the store enrollment in §11.9 blocks
+device QA too, not just submission.** That dependency was not previously recorded.
+
+### 14.6 `SafeAreaView` from `react-native` silently drops every page background — P0
+
+Symptom: after the SDK 57 client booted, every screen rendered as a blank near-white page.
+Icons appeared; **no text did**.
+
+**Root cause.** All five screens imported `SafeAreaView` from `react-native`:
+[app/(tab)/home.tsx:3](app/(tab)/home.tsx#L3),
+[app/(tab)/settings.tsx:7](app/(tab)/settings.tsx#L7),
+[app/(tab)/activity.tsx:2](app/(tab)/activity.tsx#L2),
+[app/add-reminder.tsx:2](app/add-reminder.tsx#L2),
+[app/location-picker.tsx:4](app/location-picker.tsx#L4).
+
+NativeWind only registers `cssInterop` for the **`react-native-safe-area-context`**
+version — `react-native-css-interop/dist/runtime/components.js:49`. React Native's own
+`SafeAreaView` is not in the mapping table, so `className="flex-1 bg-background
+dark:bg-background-dark"` on every page container was **silently ignored**. No error, no
+warning: the prop is simply not read.
+
+The result is a two-part failure that looks worse than its cause:
+
+| Layer | What happened |
+|---|---|
+| Page container | `className` dropped → no background, no `flex-1`. The OS default `#f2f2f2` showed through |
+| Everything inside | NativeWind working normally, dark mode active → `dark:text-foreground-dark` = `#f5f5f5` |
+
+Near-white text on a near-white background. The content was rendering the whole time.
+
+**Why the obvious suspect was wrong.** The risk register predicted "NativeWind breaks under
+RN 0.86 — every screen loses styling", and this looks exactly like that. It is not.
+A probe rendered in the running app proved NativeWind is fully functional: a
+`className="text-black"` `<Text>` and a `className="bg-blue-600"` `<View>` both rendered
+correctly while the surrounding screen stayed blank. The Babel transform was also verified
+in the served bundle — every element routes through
+`_reactNativeCssInteropJsxRuntime.jsx` with `className` intact. **The bug was ours: one
+wrong import path, repeated five times.**
+
+**Fix.** Import `SafeAreaView` from `react-native-safe-area-context` on all five screens.
+That package is already a dependency, and React Navigation supplies the required provider,
+so no root change was needed. Verified on the simulator: the dark theme, header, search,
+empty state and tab bar all render, and the live-location badge is active.
+
+This also clears a deprecation: RN 0.86 warns that its own `SafeAreaView` "has been
+deprecated and will be removed in a future release"
+(`node_modules/react-native/index.js:96`).
+
+**The lesson worth keeping:** a `className` on an unmapped component fails *silently*.
+Nothing in `tsc`, lint, or the bundler can see it — only running the app can.
+
+### Verified this session
+
+Against the local API (Go, Docker, listening on `*:8080`), with a throwaway account:
+
+- Account deletion end to end — the five checks tabulated in §4.1, all passing.
+- The endpoint returns `200` with a JSON body, not the `204` §4.1 originally specified.
+  The client ignores the body, so nothing needed changing.
+- `DELETE` repeated with the same token returns `200`. Idempotent — no error path.
+- Base-URL precedence across six configurations, including that `__DEV__` gating holds.
+- `tsc --noEmit` clean. Lint 5 problems, all pre-existing, none in the files touched.
+
+**Not verified:** any of it on a device. The deletion flow has been exercised with `curl`
+against the API, never through the Settings screen on hardware. The `404` bootstrap path
+in §14.2 in particular has been reasoned about and typechecked, not observed.
