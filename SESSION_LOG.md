@@ -9,6 +9,51 @@ blockers, and intent — the things that are not recoverable from the diff.
 
 ---
 
+## 2026-08-31 — History tab, and the tab bar back on its dock
+
+**Branch:** `feat/history-tab` (off `fix/account-deletion-endpoint`) → PR #13
+
+Stacked on PR #12 rather than branched off `main`: it needs that branch's `SafeAreaView`
+fix and tab-bar work, and editing `(tab)/_layout.tsx` from `main` would conflict on merge.
+
+### Completed
+- **New `app/(tab)/history.tsx`.** Lists reminders that have finished — `triggered ||
+  !enabled` — newest first, each with the detail needed to recognise it (icon, title,
+  place, radius, frequency, and when it stopped) and a **Set up again** button.
+- **Set up again reactivates the existing record** with
+  `updateReminder(id, { triggered: false, enabled: true })` instead of creating a copy, so
+  every detail is kept and no duplicate lands on Home.
+- **Fourth tab registered** between Home and Activity. This supersedes the settled "three
+  tabs at launch" decision — recorded in `CLAUDE.md` as an owner decision.
+- **Tab bar docked again.** The floating pill is reverted at Dan's request. The spacing fix
+  stays: the add button sits above the bar, so it covers no label at three tabs or four.
+
+### Decisions made
+| Decision | Chosen | Rejected / why |
+|---|---|---|
+| What "past" means | `triggered \|\| !enabled` | Deleted reminders — the API hard-deletes them, so there is nothing left to restore |
+| Reuse mechanism | Reactivate the same record | `createReminder` with copied fields — duplicates the row and orphans its activity history |
+| Home overlap | Left as is | Excluding past reminders from Home is a decision about what Home means; out of scope here |
+
+### Verified
+- `tsc --noEmit` clean; lint 5 problems, all pre-existing.
+- On the simulator: the four-tab bar renders with every label readable, and the History
+  screen renders both empty and populated (the populated card checked against the real
+  `buy food` reminder).
+
+### Not verified
+- **The Set up again button has not been pressed on device.** Its handler calls the same
+  `updateReminder` that Home's toggle already uses, and it typechecks, but the tap itself
+  is unexercised. Synthetic clicks into the simulator proved too unreliable to drive it.
+- Nothing on physical hardware.
+
+### Next action
+**Tap Set up again once on the simulator** — switch a reminder off, open History, press it,
+and confirm the reminder returns to Home enabled with its details unchanged. Then the
+deletion flow from §14 still needs its own pass through Settings.
+
+---
+
 ## 2026-08-31 — Account deletion connected to the local API
 
 **Branch:** `fix/account-deletion-endpoint` (off `origin/main`) → no PR yet

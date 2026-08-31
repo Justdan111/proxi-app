@@ -1,13 +1,14 @@
 import { Tabs, useRouter } from 'expo-router';
-import { Home, Clock, Settings, Plus } from 'lucide-react-native';
+import { Home, Clock, History, Settings, Plus } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/themeContext';
 import { ACCENT } from '@/lib/theme';
 import { View, TouchableOpacity } from 'react-native';
 
 // The bar is docked to the bottom edge. The add button sits above it rather
-// than on it: with three tabs the centre slot is Activity, so anything centred
-// on the bar covers that label. FAB_GAP is the air between the two.
+// than on it: centred on the bar it lands on a tab's label — the middle slot
+// with three tabs, the seam between two with four. FAB_GAP is the air between
+// the button and the bar.
 const BAR_HEIGHT = 70;
 const FAB_SIZE = 60;
 const FAB_GAP = 12;
@@ -44,6 +45,14 @@ export default function AppLayout() {
             title: 'Home',
             tabBarLabel: 'Home',
             tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
+          }}
+        />
+        <Tabs.Screen
+          name="history"
+          options={{
+            title: 'History',
+            tabBarLabel: 'History',
+            tabBarIcon: ({ color, size }) => <History color={color} size={size} />,
           }}
         />
         <Tabs.Screen

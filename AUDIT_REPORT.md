@@ -1383,6 +1383,30 @@ deprecated and will be removed in a future release"
 **The lesson worth keeping:** a `className` on an unmapped component fails *silently*.
 Nothing in `tsc`, lint, or the bundler can see it — only running the app can.
 
+### 14.7 History tab — added 31 August 2026
+
+A fourth tab, between Home and Activity, listing reminders that have finished so they can
+be used again without being rebuilt.
+
+**What counts as past.** `reminder.triggered || !reminder.enabled` — a `once` reminder that
+fired (the background task writes `triggered`), or any reminder switched off. Nothing here
+is deleted, which is precisely why the details survive to be reused.
+
+**How "Set up again" works.** It calls the existing
+`updateReminder(id, { triggered: false, enabled: true })` rather than creating a copy. That
+keeps title, place, radius, icon, frequency and timeframe exactly as they were, and avoids
+a duplicate appearing on Home. The record moves back to active and leaves this list.
+
+**Known overlap, deliberately left alone.** Home filters on the search box only, so a
+finished reminder still appears there too, greyed by its existing disabled overlay. Making
+Home exclude past reminders is a real decision about what Home means, and was out of scope
+for this change.
+
+This supersedes the "three tabs at launch" line in §7. Four tabs also happens to resolve
+the add-button collision differently: the centre of a four-tab bar is the seam between two
+tabs rather than a label. The button still sits above the bar, so neither case depends on
+tab count.
+
 ### Verified this session
 
 Against the local API (Go, Docker, listening on `*:8080`), with a throwaway account:
