@@ -5,15 +5,14 @@ import { useTheme } from '@/context/themeContext';
 import { ACCENT } from '@/lib/theme';
 import { View, TouchableOpacity } from 'react-native';
 
-// The bar is docked to the bottom edge, and the add button straddles its top
-// edge. That only works because there are four tabs: the centre of a four-tab
-// bar is the seam between History and Activity, so the button hangs over a gap
-// rather than a label. At three tabs it would sit on the middle one.
-// FAB_OVERLAP is how far the button hangs down into the bar.
+// The bar is docked to the bottom edge. The add button is centred, which with
+// four tabs puts it in the seam between History and Activity rather than over a
+// label, and FAB_LIFT holds it just clear of the bar's top edge. At three tabs
+// the centre would be a label instead, so this depends on the tab count.
 const BAR_HEIGHT = 70;
 const BAR_PAD_TOP = 14;
 const FAB_SIZE = 60;
-const FAB_OVERLAP = 0.45;
+const FAB_LIFT = 12;
 
 export default function AppLayout() {
   const { isDark } = useTheme();
@@ -78,11 +77,11 @@ export default function AppLayout() {
         />
       </Tabs>
 
-      {/* Add reminder, sitting on the bar's top edge. */}
+      {/* Add reminder, in the History/Activity seam, lifted off the bar. */}
       <View
         style={{
           position: 'absolute',
-          bottom: BAR_HEIGHT + insets.bottom,
+          bottom: BAR_HEIGHT + insets.bottom + FAB_LIFT,
           alignSelf: 'center',
           zIndex: 100,
         }}
