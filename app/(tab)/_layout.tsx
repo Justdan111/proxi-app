@@ -1,16 +1,18 @@
 import { Tabs, useRouter } from 'expo-router';
-import { Home, Clock, Settings, Plus } from 'lucide-react-native';
+import { Home, Clock, History, Settings, Plus } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/context/themeContext';
 import { ACCENT } from '@/lib/theme';
 import { View, TouchableOpacity } from 'react-native';
 
-// The bar is docked to the bottom edge. The add button sits above it rather
-// than on it: with three tabs the centre slot is Activity, so anything centred
-// on the bar covers that label. FAB_GAP is the air between the two.
+// The bar is docked to the bottom edge. The add button is centred, which with
+// four tabs puts it in the seam between History and Activity rather than over a
+// label, and FAB_LIFT holds it just clear of the bar's top edge. At three tabs
+// the centre would be a label instead, so this depends on the tab count.
 const BAR_HEIGHT = 70;
+const BAR_PAD_TOP = 14;
 const FAB_SIZE = 60;
-const FAB_GAP = 12;
+const FAB_LIFT = 12;
 
 export default function AppLayout() {
   const { isDark } = useTheme();
@@ -29,7 +31,10 @@ export default function AppLayout() {
             borderTopColor: isDark ? '#2a2a2a' : '#e5e7eb',
             borderTopWidth: 1,
             height: BAR_HEIGHT + insets.bottom,
-            paddingBottom: insets.bottom + 8,
+            // Sits the icon and label lower in the bar, clear of the button
+            // hanging over the top edge.
+            paddingTop: BAR_PAD_TOP,
+            paddingBottom: insets.bottom + 6,
           },
           tabBarLabelStyle: {
             fontSize: 11,
@@ -44,6 +49,14 @@ export default function AppLayout() {
             title: 'Home',
             tabBarLabel: 'Home',
             tabBarIcon: ({ color, size }) => <Home color={color} size={size} />,
+          }}
+        />
+        <Tabs.Screen
+          name="history"
+          options={{
+            title: 'History',
+            tabBarLabel: 'History',
+            tabBarIcon: ({ color, size }) => <History color={color} size={size} />,
           }}
         />
         <Tabs.Screen
@@ -64,11 +77,11 @@ export default function AppLayout() {
         />
       </Tabs>
 
-      {/* Add reminder. Cleared of the bar so every label stays readable. */}
+      {/* Add reminder, in the History/Activity seam, lifted off the bar. */}
       <View
         style={{
           position: 'absolute',
-          bottom: BAR_HEIGHT + insets.bottom + FAB_GAP,
+          bottom: BAR_HEIGHT + insets.bottom + FAB_LIFT,
           alignSelf: 'center',
           zIndex: 100,
         }}

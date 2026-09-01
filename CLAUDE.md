@@ -125,7 +125,8 @@ alternative. Full reasoning in `AUDIT_REPORT.md` §5.
 - Geocoding: expo-location native geocoder behind a `GeocodingProvider` interface;
   Google Places is a deliberate fast-follow.
 - Expo SDK 57 (full upgrade, not an API-36 pin on SDK 54).
-- Explorer tab merges into Home; three tabs at launch.
+- Explorer tab merges into Home. Three tabs at launch became **four on 31 August 2026**
+  when Dan asked for a History tab; that is an owner decision, not a relitigation.
 - Alarm notifications: maximum achievable without native code. Android full-screen
   intent and iOS AlarmKit are deferred. **A true full-screen alarm takeover is
   impossible on third-party iOS apps — never promise it.**
