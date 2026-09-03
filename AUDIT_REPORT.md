@@ -1451,6 +1451,41 @@ this project enables the React Compiler and reading `ref.current` during render 
 what it forbids.
 >>>>>>> fix/launch-routing-and-splash
 
+### 14.10 Signup showed the server's raw validator output — P1 — **RESOLVED**
+
+A short password produced this, verbatim, in the signup form's error box:
+
+```
+Key: 'SignupInput.Password' Error:Field validation for 'Password' failed on the 'min' tag
+```
+
+Two separate faults, both fixed.
+
+**The client never checked anything.** `components/signUpScreen.tsx` tested only that the
+fields were non-empty and that the two passwords matched. The API's actual rules —
+**password ≥ 6, name ≥ 2**, probed directly against the running service — were nowhere in
+the client, so the only way to discover them was to submit and be rejected. They now live
+in `lib/validation.ts` and are checked as the user types, so the common mistakes never
+reach the network.
+
+**`getApiError` trusted the server's message.** It returned `response.data.error`
+unchanged, which assumes the API sends copy written for people. This one sends
+go-playground/validator output naming internal Go struct fields. `lib/api/errors.ts` now
+recognises that shape and translates it per field, falling through to the original string
+for everything else — the API's other messages (`invalid credentials`, `email already
+registered`) are already fine and pass untouched. Login and forgot-password share the same
+funnel, so they are covered too.
+
+The rules constant is shared by both, so the number in the message and the number enforced
+cannot drift apart.
+
+**Verified** against the exact strings the API produced, including the two-line
+name-and-password case, plus `email`, `required`, an unknown tag, and two ordinary
+messages that must pass through unchanged.
+
+*Caveat: the form itself has not been re-run on a device — the local API is stopped, and
+reaching the signup screen requires signing out.*
+
 ### Verified this session
 
 Against the local API (Go, Docker, listening on `*:8080`), with a throwaway account:
