@@ -9,6 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Eye, EyeOff, ArrowRight, MapPin } from 'lucide-react-native';
 import { useAuth } from '@/context/authContext';
+import { validateSignup, isSignupComplete } from '@/lib/validation';
 
 type SignUpScreenProps = {
   onNavigate: (screen: 'login') => void;
@@ -23,7 +24,11 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
   const [loading, setLoading] = useState(false);
   const { signup, error, clearError } = useAuth();
 
-  const hasPasswordMismatch = confirmPassword.length > 0 && password !== confirmPassword;
+  // Checked as the user types, so the rules are learned in place rather than
+  // by submitting and reading a rejection.
+  const fieldErrors = validateSignup({ name, email, password, confirmPassword });
+  const isComplete = isSignupComplete({ name, email, password, confirmPassword });
+  const canSubmit = isComplete && Object.keys(fieldErrors).length === 0 && !loading;
 
   // Animation values
   const headerOpacity = useSharedValue(0);
@@ -89,16 +94,14 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
   }));
 
   const handleSignUp = async () => {
-    if (name && email && password && !hasPasswordMismatch) {
-      setLoading(true);
-      try {
-        clearError();
-        await signup(name.trim(), email.trim(), password);
-      } catch (error) {
-        console.log('[v0] Signup error:', error);
-      } finally {
-        setLoading(false);
-      }
+    if (!canSubmit) return;
+
+    setLoading(true);
+    try {
+      clearError();
+      await signup(name.trim(), email.trim(), password);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -126,11 +129,17 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
               placeholder="Your name"
               placeholderTextColor="#9CA3AF"
               value={name}
-              onChangeText={setName}
+              onChangeText={(value) => {
+                setName(value);
+                if (error) clearError();
+              }}
               autoCapitalize="words"
               className="w-full bg-card dark:bg-card-dark px-4 py-4 text-foreground dark:text-foreground-dark text-base rounded-xl"
               editable={!loading}
             />
+            {fieldErrors.name ? (
+              <Text className="text-rose-500 text-sm mt-2">{fieldErrors.name}</Text>
+            ) : null}
           </Animated.View>
 
           {/* Email Field */}
@@ -148,6 +157,9 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
               className="w-full bg-card dark:bg-card-dark px-4 py-4 text-foreground dark:text-foreground-dark text-base rounded-xl"
               editable={!loading}
             />
+            {fieldErrors.email ? (
+              <Text className="text-rose-500 text-sm mt-2">{fieldErrors.email}</Text>
+            ) : null}
           </Animated.View>
 
           {/* Password Field */}
@@ -179,6 +191,9 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
                 )}
               </TouchableOpacity>
             </View>
+            {fieldErrors.password ? (
+              <Text className="text-rose-500 text-sm mt-2">{fieldErrors.password}</Text>
+            ) : null}
           </Animated.View>
 
           {/* Confirm Password Field */}
@@ -210,13 +225,11 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
                 )}
               </TouchableOpacity>
             </View>
+            {fieldErrors.confirmPassword ? (
+              <Text className="text-rose-500 text-sm mt-2">{fieldErrors.confirmPassword}</Text>
+            ) : null}
           </Animated.View>
 
-          {hasPasswordMismatch ? (
-            <View className="mb-4">
-              <Text className="text-rose-500 text-sm">Passwords do not match.</Text>
-            </View>
-          ) : null}
         </View>
 
         {error ? (
@@ -229,16 +242,16 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
         <Animated.View style={buttonAnimatedStyle}>
           <TouchableOpacity
             onPress={handleSignUp}
-            disabled={!name || !email || !password || !confirmPassword || hasPasswordMismatch || loading}
+            disabled={!canSubmit}
             className={`w-full rounded-full py-4 items-center mb-6 flex-row justify-center ${
-              !name || !email || !password || !confirmPassword || hasPasswordMismatch || loading 
-                ? 'bg-muted dark:bg-muted-dark' 
+              !canSubmit
+                ? 'bg-muted dark:bg-muted-dark'
                 : 'bg-primary dark:bg-primary-dark'
             }`}
           >
             <Text
               className={`font-semibold text-lg mr-2 ${
-                !name || !email || !password || !confirmPassword || hasPasswordMismatch || loading
+                !canSubmit
                   ? 'text-muted-foreground dark:text-muted-foreground-dark'
                   : 'text-primary-foreground dark:text-primary-foreground-dark'
               }`}
@@ -249,8 +262,8 @@ export default function SignUpScreen({ onNavigate }: SignUpScreenProps) {
               <ArrowRight 
                 size={20} 
                 className={
-                  !name || !email || !password || !confirmPassword || hasPasswordMismatch
-                    ? 'text-muted-foreground dark:text-muted-foreground-dark' 
+                  !canSubmit
+                    ? 'text-muted-foreground dark:text-muted-foreground-dark'
                     : 'text-primary-foreground dark:text-primary-foreground-dark'
                 } 
               />
