@@ -69,8 +69,8 @@ is §14.4, and it is not a map question.
 
 | Milestone | Blocking factor | Status |
 |---|---|---|
-| Code complete | Engineering | **Done** — days 1–4 merged |
-| Device QA | A physical device; not compressible | **Not started** |
+| Code complete | Engineering | **Done** — days 1–4, plus PRs #12–#15 (§14) |
+| Device QA | A physical device — **and Apple enrolment**, since EAS is configured simulator-only (§14.5) | **Not started** |
 | Account deletion working | Backend `DELETE /api/auth/me` | **Works locally** — verified end-to-end 31 Aug; needs a production deploy |
 | Apple enrollment usable | 24–48h after applying | **Not started** |
 | iOS submitted | Active Apple account **and** the delete endpoint deployed | Blocked on both |
@@ -81,104 +81,120 @@ The Play date is set by the tester clock, not by engineering, and that clock has
 started. Enroll with Apple as an **individual** — organization enrollment requires a
 D-U-N-S number and adds 1–2 weeks.
 
+**Updated 4 September 2026.** PRs #12–#15 are merged and nothing is open. The 31 August
+session ran the upgraded app for the first time (§14.5) and, in doing so, found and fixed
+four defects that only a running build could expose: blank screens from an unmapped
+`SafeAreaView` (§14.6), a cold launch landing on Unmatched Route (§14.8), an Expo
+placeholder splash (§14.9), and raw Go validator output shown to users at signup (§14.10).
+The standing **Remaining Work** section below is rewritten to match. The Play API-36 rule
+took effect on 31 August; the app has targeted 36 since day 1.
+
 ## Remaining Work
 
-Status as of **30 August 2026**, after days 1–4, the review-fix branch, and the re-audit
-in §13.
+Status as of **4 September 2026**, after days 1–4, the re-audit in §13, and the 31 August
+session in §14. PRs #12 through #15 are merged; nothing is open.
 
-Every defect in §3, §6, §7, §8 and §9 that was in scope for launch is fixed. The re-audit
-found **six further defects** in the merged code (§13) — none blocking, two worth fixing
-before testers get a build. Everything else that remains is outside this repository: a
-backend endpoint, two store accounts, a device, and three console forms.
+**Everything that blocks production is now outside this repository.** The code side is
+finished apart from two P2s and a handful of paths that have been built but never pressed.
+What stands between this and a store listing is a deployment, two accounts, a device, and
+three console forms — plus a fourteen-day clock that has not started.
 
-Numbered references point at the sections below, which hold the full diagnosis. §12 records
-what each day resolved; §13 is this re-audit.
+Numbered references point at the sections below. §12 records what each day resolved, §13 is
+the 30 August re-audit, §14 the 31 August session.
 
-### Blocked on someone else — this is the critical path
+### The one thing that gates everything else
+
+**The API is not deployed.** `proxi-api-production.up.railway.app` returns
+
+```json
+{"status":"error","code":404,"message":"Application not found"}
+```
+
+for **every** route, `/api/auth/login` included — re-checked 4 September. This is Railway's
+edge answering for a service that is not there, not the API returning 404.
+
+A production build cannot sign in. Not "cannot delete an account" — cannot sign in at all.
+That makes it the precondition for the device pass against real data, for any tester build,
+and for both submissions. It is listed first because nothing below can be finished while it
+is true.
+
+### Blocked on someone else — the critical path
 
 | § | Item | Why it blocks |
 |---|---|---|
-| **4.1** | The API is not deployed — Railway returns `Application not found` for every route | **Nothing in production works**, sign-in included. `DELETE /api/auth/me` itself is done: it ships on the local API and is verified end-to-end (see §4.1). What blocks iOS now is deploying the service, not writing the route |
-| **11.9** | Neither store account is enrolled | Enrol with Apple as an **individual** — organization enrolment needs a D-U-N-S number and adds one to two weeks |
-| — | **12 Google Play testers are not recruited** | 12 testers × 14 **continuous** days of closed testing before a new personal account gets production access. Pure wall-clock, not work. The clock has not started, and this single item sets the Play date regardless of engineering. Aim for 15 — dropping below 12 restarts it |
+| **4.1** | **Deploy the API** | Nothing in production works. The `DELETE /api/auth/me` route itself is **done** — written, and verified end-to-end against a local instance (§4.1) — so this is a deployment, not development |
+| **11.9** | **Neither store account is enrolled** | Enrol with Apple as an **individual**; organisation enrolment needs a D-U-N-S number and adds one to two weeks. **This also blocks device QA** — see below |
+| — | **12 Google Play testers are not recruited** | 12 testers × 14 **continuous** days of closed testing before a new personal account gets production access. Pure wall-clock. The clock has not started, and this single item sets the Play date regardless of engineering. Aim for 15 — dropping below 12 restarts it |
 
-#### §4.1 was one route — it is written, and the blocker moved
+#### Apple enrolment blocks the device pass, not just submission
 
-**The route exists and works.** Written against the project's own API and verified
-end-to-end on 31 August 2026: it hard-deletes the user with their reminders, refuses the
-old credentials, and frees the email for re-registration. It returns `200` with a JSON
-body rather than the `204` this report suggested; the client ignores the body, so that is
-a non-issue. Full evidence in §4.1.
+Recorded in §14.5 and not previously on this page. `eas.json`'s `development` profile is
+`ios.simulator: true`, so **EAS as configured cannot produce a physical-device build**, and
+internal distribution to real hardware needs the paid Apple account. A local build with a
+free personal team is the only route to a device today.
 
-**The blocker moved rather than cleared.** Railway now serves
-`{"status":"error","code":404,"message":"Application not found"}` for every route,
-`/api/auth/login` included — the service is not deployed. Deletion cannot be verified
-against production, and neither can anything else, until it is.
+Since §11.1, §11.5, §11.6 and §11.8 all require hardware, enrolment sits upstream of the
+entire verification surface. It is the item most worth starting today.
 
-**It may not be Apple-only.** This report scopes account deletion to Apple 5.1.1(v), but
-Google Play also requires account deletion for apps that allow account creation, in-app and
-via a web URL, declared in the Data Safety form. **Confirm this in Play Console before
-scoping the work** — if it applies, the same endpoint blocks both stores rather than one,
-which changes its priority relative to everything else on this page.
+#### Account deletion may block both stores, not just Apple
 
-There is no client-side substitute for either store. Clearing local storage is not deletion:
-the account still exists and signing in restores it, which is precisely the pattern Apple
-rejects. Directing users to email support does not satisfy the in-app requirement.
+This report scopes deletion to Apple 5.1.1(v), but Google Play also requires in-app account
+deletion **and** a web URL for apps that allow account creation, declared in the Data Safety
+form. **Confirm this in Play Console before scoping** — if it applies, the same deployment
+gates both stores. There is no client-side substitute: clearing local storage is not
+deletion, and signing in would restore the account, which is exactly the pattern Apple
+rejects.
 
-### Open questions — answerable here, without waiting on anyone
+### Code — what is actually left in this repository
 
-These are **unknowns, not missing work.** They were previously filed alongside the genuine
-external blockers, which made them look like they were waiting on somebody. They are not.
-
-| § | Question | How to settle it |
-|---|---|---|
-| **3.3** | Does `PUT /api/reminders/:id` accept `triggered`? | The endpoint already exists; only field acceptance is in doubt. Log in against the API, `PUT {"triggered": true}` to a reminder, and read the response back. If it returns `triggered: true` the question closes; if it echoes `false` or drops the field, the server ignores it |
-
-**Neither outcome blocks launch.** If the field is ignored, `once` reminders still
-auto-disable through the `toggle` fallback and the only loss is the green "Completed" badge.
-Should it come to that, the badge could instead be rendered from the local
-`proxi_triggered_cache` the geofence task already writes — correct day to day, lost on
-reinstall. That is deliberately **not** built yet: it is speculative complexity until the
-question above has an answer.
-
-Device check 2.4c reaches the same conclusion from the other direction — reinstall, sign in,
-and see whether completion survived — but does not require a device to answer.
-
-### Code — from the 30 August re-audit (§13)
-
-Small, and all in this repository. **Both P1s are fixed** — what remains is P2 and does not
-gate a tester build.
+Small, and none of it gates a tester build.
 
 | § | Item | Priority |
 |---|---|---|
-| **13.2** | Geofencing runs a foreground service and samples location with zero enabled reminders | P2 |
-| **13.5** | Four `console.log` calls ship, three still tagged `[v0]`, on swallowed error paths | P2 |
-| ~~13.1~~ | ~~Permission granted outside the app never starts geofencing~~ | **Fixed** |
-| ~~13.3~~ | ~~Activity tab never refreshes~~ | **Fixed** |
-| ~~13.4~~ | ~~Place-search debounce never cancelled~~ | **Fixed** |
-| ~~13.7~~ | ~~Six geocoding calls per keystroke burst~~ | **Fixed** |
+| **13.2** | Geofencing runs a foreground service and samples location with **zero enabled reminders** — battery cost and a permanent notification in exchange for nothing | P2 |
+| **13.5** | Three `console.log` calls still ship on swallowed error paths, two tagged `[v0]` — `app/_layout.tsx:173`, `app/(tab)/settings.tsx:156`, `components/loginScreen.tsx:106` | P2 |
+| **14.4** | Tracking uses continuous location updates rather than OS geofences. **No change recommended before launch** — it bought §3.1's fix, and the trade is only worth revisiting with real battery numbers from the device pass | P3 |
+| — | A legacy `cachedReminders` AsyncStorage key survives logout **and** account deletion: `clearLocalSession()` wipes `proxi_*` only. Current code never writes it, so it affects only installs carried over from an April build — but it holds reminder content, and deletion completeness is precisely what 5.1.1(v) scrutinises | P2 |
+| — | Decide `supportsTablet`, currently `true` in `app.json:11`. It obliges iPad screenshots and an app that looks right on one; `false` is a one-line change that removes an entire review surface | P2 |
 
-§13.6 records which lint errors are real and which are a rule firing on a correct pattern —
-read it before "fixing" any of them. With §13.4 fixed, lint is down to **6 problems
-(3 errors, 3 warnings)**, and every remaining one is in the accepted category.
+Fixed since the 30 August re-audit: §13.1, §13.3, §13.4 and §13.7, plus everything in §14
+except the items above. §13.6 records which lint errors are real and which are a rule firing
+on a correct pattern — read it before "fixing" any of them. Lint currently reports **4
+problems**, all in the accepted category.
 
-### Needs an asset
+### Built but never pressed
 
-| § | Item | Status |
+Not defects, and not verified either. Each is one manual pass, and each is short.
+
+| Path | Why it matters |
+|---|---|
+| **Account deletion through Settings** | Proven with `curl` against the API and typechecked in the client, but the Settings row → confirmation → teardown → login sequence has never been run on a device. This is the Apple-critical flow |
+| **History → Set up again** | The button's handler calls the same `updateReminder` that Home's toggle uses, but it has never been tapped |
+| **Signup validation** (§14.10) | The translator is verified against the API's exact strings; the form itself has not been re-run, because reaching it means signing out |
+
+### Worth a look before the device pass
+
+A reminder saved as *Adetokunbo Ademola Crescent* — an Eti-Osa address — reported **536 km
+away** with the simulator located in Eti-Osa. The stored coordinates appear not to match the
+address text. A geofence fires on coordinates, not on the label, so if the geocoder is
+storing the wrong point the feature silently does not work. Reproduce before blaming the
+device pass for it.
+
+### Open questions — answerable here, without waiting on anyone
+
+| § | Question | How to settle it |
 |---|---|---|
-| ~~5.8~~ | ~~The alert sound is a 3.36s chime~~ | **Fixed** — replaced with a 24s alarm tone; generator at `scripts/generate-alarm-tone.py` |
+| **3.3** | Does `PUT /api/reminders/:id` accept `triggered`? | The endpoint exists; only field acceptance is in doubt. Log in, `PUT {"triggered": true}` to a reminder, read the response back. If it returns `triggered: true` the question closes; if it echoes `false` or drops the field, the server ignores it. **The History tab depends on this** — "Set up again" writes `triggered: false` |
 
-**Nothing further is outstanding in this group.** The sound landed before any build was
-distributed, so no `proxi-alarm-v3` bump is needed — see §5.8. Test on a **clean install**;
-a device that ran a local build after day 2 merged may still hold a `proxi-alarm-v2` channel
-carrying the old chime, which device QA §0.3 already accounts for.
+**Neither outcome blocks launch.** If the field is ignored, `once` reminders still
+auto-disable through the `toggle` fallback and the only loss is the green "Completed" badge.
 
 ### Needs a physical device — §11.1, §11.5, §11.6, §11.8
 
-**Nothing across the four days has been run on hardware.** This is the whole verification
-surface, and it cannot be reduced: background geofencing and notification delivery are not
-testable in a simulator, which will happily show a notification appearing and tell you
-nothing about which channel carried it.
+**Nothing has ever been run on hardware.** This is the whole verification surface and it
+cannot be reduced: background geofencing and notification delivery are not testable in a
+simulator, which will happily show a notification appearing and tell you nothing about which
+channel carried it.
 
 `release/DEVICE_QA.md` is the pass — 63 checks, ordered so a failure identifies the change
 that caused it. Run `npx expo prebuild --clean` first; the local `android/` directory is
@@ -188,19 +204,21 @@ The four highest-value checks:
 
 - **§3.9** — the alarm channel confirmed in Android's per-channel settings, at MAX
   importance, with Do Not Disturb actually enabled. None of this has ever applied
-- **§3.1** — stay inside a fence for 10+ minutes and get no repeats. This is also the check
-  that would expose the concurrency race fixed on `fix/geofence-concurrency`
+- **§3.1** — stay inside a fence for 10+ minutes and get no repeats. This also exposes the
+  concurrency race fixed on `fix/geofence-concurrency`
 - **§5.3** — the radius circle matches the configured metres against real streets
 - **§11.8** — the geofence fires with the app terminated, and again after a device reboot
+
+As of 31 August the app has at least **run** on a simulator on SDK 57 for the first time
+(§14.5), which closes nothing on this list but means the build is no longer unproven.
 
 ### Needs a console or a published URL
 
 | § | Item |
 |---|---|
-| **4.6** | Publish the privacy policy at a public URL; complete the App Store privacy labels and the Play Data Safety form; capture screenshots; enter the listing copy. All **drafted** in `release/`, none submitted. The two forms must agree with each other and with the app — a mismatch is its own rejection reason |
-| **10** | **Restrict the Android Google Maps key** to the package name and release SHA-1 in Google Cloud Console. Mandatory, not optional: it ships inside a public binary and an unrestricted key is billable by anyone who extracts it |
-| **4.8** | Confirm the target-API warning is absent when the build is uploaded to Play Console |
-| — | Decide `supportsTablet`, currently `true`. It obliges iPad screenshots and an app that looks right on one; setting it false is a one-line change that removes an entire review surface |
+| **4.6** | Publish the privacy policy at a public URL; complete the App Store privacy labels and the Play Data Safety form; capture screenshots; enter listing copy. All **drafted** in `release/`, none submitted. The two forms must agree with each other and with the app — a mismatch is its own rejection reason |
+| **10** | **Restrict the Android Google Maps key** to the package name and release SHA-1 in Google Cloud Console. It is currently **unset entirely**, so the Android map renders blank; once set it ships inside a public binary, and an unrestricted key is billable by anyone who extracts it |
+| **4.8** | Confirm the target-API warning is absent when the build is uploaded. The Play rule requiring API 36 for new apps **took effect on 31 August 2026** and is now live; the app has targeted 36 since day 1, so this is a confirmation rather than work |
 
 ### Deferred by decision — not gaps
 
@@ -220,8 +238,11 @@ unfinished work.
 ### Against the Go-Live Criteria (§11)
 
 Criteria **3, 4 and 5** are met in code, and every P0 in §3 is fixed but **not yet verified
-on a device**, which criterion 1 requires. The remaining five reduce to four actions: get
-the backend endpoint, run the device pass, publish the compliance package, and enrol.
+on a device**, which criterion 1 requires. The remaining work reduces to four actions in
+this order: **deploy the API**, **enrol with Apple** (which unblocks the device build),
+**run the device pass**, and **publish the compliance package**. The Play tester clock
+should start the moment a build exists, because it is the only item that cannot be
+shortened by effort.
 
 ---
 
