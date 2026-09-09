@@ -9,6 +9,40 @@ blockers, and intent — the things that are not recoverable from the diff.
 
 ---
 
+## 2026-09-04 — Remaining Work rewritten against the merged state
+
+**Branch:** `docs/remaining-work-2026-09-04` → PR #16
+
+### Completed
+- Rewrote `AUDIT_REPORT.md`'s standing **Remaining Work** section. It was dated 30 August
+  and predated PRs #12–#15, so it still listed `DELETE /api/auth/me` as unwritten and said
+  nothing about the four defects §14 found by running the app.
+- Re-verified the blockers rather than restating them: Railway still answers
+  `Application not found` on every route, the Maps key is still unset, three `console.log`
+  calls remain (two `[v0]`-tagged), and `supportsTablet` is still `true`.
+
+### What the rewrite changes materially
+- **Deployment is now the top entry**, above account deletion. The endpoint is written and
+  verified; production has no service at all, which is the larger problem.
+- **Apple enrolment is recorded as blocking device QA**, not just submission — `eas.json` is
+  `ios.simulator: true`, so EAS cannot build to hardware (§14.5). That moves enrolment
+  upstream of the entire verification surface, and it was not on this page before.
+- Added a **"Built but never pressed"** group: account deletion through Settings, History's
+  *Set up again*, and the signup form. All three are implemented and none has been tapped.
+- Recorded the **address/coordinates mismatch** — an Eti-Osa address reporting 536 km away
+  from Eti-Osa. A geofence fires on coordinates, so if that is real the feature silently
+  does not work.
+- Noted the Play API-36 rule took effect 31 August; the app has targeted 36 since day 1.
+
+### Not verified
+- Nothing new was run. This entry is documentation only.
+
+### Next action
+**Deploy the API.** It is the precondition for the device pass, any tester build, and both
+submissions. Start Apple enrolment the same day — it is the long pole for device QA.
+
+---
+
 ## 2026-08-31 — History tab, and the tab bar back on its dock
 
 **Branch:** `feat/history-tab` (off `fix/account-deletion-endpoint`) → PR #13

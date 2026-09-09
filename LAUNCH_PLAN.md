@@ -1,7 +1,22 @@
 # Proxi Priority Fix Plan & Launch Schedule
 
-Date: 21 August 2026
+Written: 21 August 2026 · **Updated: 6 September 2026**
 Companion to: [AUDIT_REPORT.md](AUDIT_REPORT.md)
+
+> **Status: all four engineering days are merged. The plan below is now history for
+> days 1–4 and live only from [The Path to Production](#the-path-to-production) onward.**
+>
+> Days 1–4 shipped as PRs #2–#8, followed by fix branches #9–#11 and the 31 August session
+> as #12–#15. Nothing is open in the repository.
+>
+> **The schedule did not survive contact with reality, and the reason matters.** This plan
+> assumed submission around day 5–6. It is day 16 and nothing has been submitted, because
+> every remaining item is external — a deployment, two store accounts, a device — and none
+> of them were started while the engineering days ran. The engineering finished roughly on
+> time; the plan simply had no one working the external track in parallel.
+>
+> Read `AUDIT_REPORT.md` § *Remaining Work* for the defect-level view. This file holds the
+> sequence and the dates.
 
 ## Working Agreement
 
@@ -11,12 +26,16 @@ Companion to: [AUDIT_REPORT.md](AUDIT_REPORT.md)
 - Each PR must leave the app in a buildable state — a reviewer should be able to check
   out the branch and run it.
 
-| Day | Branch | PR title |
+| Day | Branch | Status |
 |---|---|---|
-| 1 | `day1/expo-57-upgrade` | Upgrade to Expo SDK 57 and migrate to react-native-maps |
-| 2 | `day2/alarm-notifications-and-geofencing` | Fix geofencing defects and deliver alarm-style alerts |
-| 3 | `day3/screen-consolidation-and-compliance` | Consolidate screens, fix routing, add account deletion |
-| 4 | `day4/release-prep` | Release configuration, compliance metadata, production build |
+| 1 | `day1/expo-57-upgrade` | **Merged** — SDK 57, `react-native-maps`, API 36 |
+| 2 | `day2/alarm-notifications-and-geofencing` | **Merged** — geofencing defects, alarm channel |
+| 3 | `day3/screen-consolidation-and-compliance` | **Merged** — screens, routing, deletion client |
+| 4 | `day4/release-prep` | **Merged** — release config and compliance drafts |
+| — | `fix/*` (#9–#11) | **Merged** — re-audit P1s, geocoding volume, alarm sound |
+| — | #12–#15 (31 Aug–3 Sep) | **Merged** — deletion wired, SDK 57 run for the first time, launch and signup fixes |
+
+Every PR was reviewed personally and none carried tool attribution, as agreed.
 
 ## Scope Change Since First Draft
 
@@ -35,6 +54,10 @@ the submission date — it consumes slack that already existed.
 **If four days is unacceptable,** cut in this order: §2.7 (haptics), §3.6 (UI
 consistency), §3.7 (performance). Do not cut anything marked P0.
 
+> **Historical.** Nothing was cut — all of it shipped. The API-36 deadline this section was
+> written around **took effect on 31 August 2026**; the app has targeted 36 since day 1, so
+> the rule is satisfied and is now a confirmation step rather than a risk.
+
 ## Priority Ladder
 
 | Priority | Meaning | Items |
@@ -44,6 +67,11 @@ consistency), §3.7 (performance). Do not cut anything marked P0.
 | **P2** | Quality, consistency, performance | §3.8, §3.10, §8.x, §9.x |
 
 Section numbers refer to [AUDIT_REPORT.md](AUDIT_REPORT.md).
+
+> **As of 6 September, every P0 and P1 above is fixed in code.** What remains at P0 is not
+> a defect but a deployment, two store accounts, and a device pass — see
+> [The Path to Production](#the-path-to-production). The P2s that are still open are listed
+> there too, and none of them gates a build.
 
 ## Sequencing Rationale
 
@@ -58,6 +86,10 @@ pure JavaScript and need no further native rebuilds.
 ---
 
 ## Day 1 — Expo SDK 57 upgrade and map migration
+
+> **Shipped.** Merged as PR #2. `react-native-maps` pinned to 1.27.2 rather than the
+> 1.29.0 named below — `expo install` resolves SDK 57's bundled-native-modules manifest,
+> and 1.29.0 fails `expo-doctor`.
 
 Branch: `day1/expo-57-upgrade`
 
@@ -176,6 +208,10 @@ Mapbox `fetch` calls in `app/location-picker.tsx` (lines 997, 1016, 1047).
 
 ## Day 2 — Geofencing correctness and alarm-style alerts
 
+> **Shipped.** Merged, with follow-ups on `fix/geofence-concurrency`,
+> `fix/geofence-restart-and-activity-refresh` and `fix/alarm-sound`. **None of it has run
+> on hardware**, which is what §4.2 below exists to fix.
+
 Branch: `day2/alarm-notifications-and-geofencing`
 
 ### 2.1 Notification spam (audit §3.1) — P0
@@ -279,6 +315,9 @@ one small `lib/haptics.ts` wrapper so it can be muted globally.
 
 ## Day 3 — Product consolidation and compliance features
 
+> **Shipped.** Merged. §3.3's client was finished here; the endpoint it needed arrived on
+> 31 August (PR #12).
+
 Branch: `day3/screen-consolidation-and-compliance`
 
 ### 3.1 Merge Explorer into Home (audit §7)
@@ -338,6 +377,11 @@ race **and** the dropped `selectedIcon` that causes every reminder to save as �
 
 ## Day 4 — Release preparation and enrollment
 
+> **Partly shipped.** §4.1's compliance package is **drafted in `release/` but not
+> submitted**; §4.2 device QA has **never been run**; §4.3 production build and §4.4
+> enrolment have **not been started**. These are the live items — see The Path to
+> Production.
+
 Branch: `day4/release-prep`
 
 ### 4.1 Compliance package (audit §4.6)
@@ -383,35 +427,100 @@ Scheduled here at the project owner's direction.
 
 ---
 
-## After Day 4
+## The Path to Production
 
-| Milestone | Depends on | Expected |
+Everything below is **outside this repository**. Ordered by what unblocks what, not by
+effort — the two longest items are wall-clock and start the moment you begin them.
+
+### Start these two today, in parallel
+
+They are independent of each other and everything else waits on both.
+
+| # | Action | Why it is first |
 |---|---|---|
-| Apple account active | 24–48h after applying | Day 5–6 |
-| iOS submitted for review | Active Apple account | Day 5–6 |
-| iOS in review | Apple queue, longer for background-location apps | Day 6–8 |
-| Play account verified | Google identity verification | Day 5–7 |
-| Play closed test starts | Verified account + uploaded build | Day 6–7 |
-| **Play production access** | **12 testers × 14 continuous days** | **~Day 21** |
+| **1** | **Deploy the API.** Railway currently answers `{"code":404,"message":"Application not found"}` on every route, `/api/auth/login` included | A production build cannot **sign in**. Not "cannot delete an account" — cannot sign in. Every item below needs a working backend to be tested against |
+| **2** | **Enrol with Apple, as an individual** ($99/yr; organisation needs a D-U-N-S number and adds 1–2 weeks) | 24–48h to approve, and it gates more than submission — see below |
 
-Recruit the 12 Play testers **now**. That is wall-clock time, not work, and it is the
-single longest lead item in the project. The 14 days do not begin until the closed test is
-live with testers opted in.
+**Apple enrolment blocks device QA, not just shipping.** `eas.json`'s `development` profile
+is `ios.simulator: true`, so EAS cannot build to physical hardware, and internal
+distribution needs the paid account (audit §14.5). Since the entire verification surface
+requires a device, enrolment sits upstream of it. This was not visible when the plan was
+written and it is the single most under-rated item on the page.
+
+### Then, in order
+
+| # | Action | Depends on | Notes |
+|---|---|---|---|
+| **3** | **Recruit 12 Play testers** (aim for 15) | Nothing — start now | 14 **continuous** days once the closed test is live. Pure wall-clock. Dropping below 12 restarts the clock, which is why 15 |
+| **4** | **Google Play Console** — $25 one-time plus identity verification | Nothing | Verification can take several days; it does not depend on 1 or 2 |
+| **5** | **Run `release/DEVICE_QA.md`** — 63 checks | 1 and 2 | `npx expo prebuild --clean` first; the local `android/` is gitignored but stale. This is the whole verification surface and cannot be compressed |
+| **6** | **Press the three unexercised paths** | 1 | Account deletion through Settings, History's *Set up again*, and the signup form. All implemented, none ever tapped. Minutes, not hours — but deletion is the Apple-critical one |
+| **7** | **Publish the compliance package** | Nothing | Privacy policy at a public URL, App Store labels, Play Data Safety. Drafted in `release/`, none submitted. The two forms must agree with each other **and** with the app |
+| **8** | **Restrict the Google Maps key** | Nothing | It is currently **unset**, so the Android map renders blank. Once set it ships inside a public binary — restrict by package name and release SHA-1 before any build leaves the machine |
+| **9** | **Production build**, both platforms | 1–8 | Confirm the Play target-API warning is absent |
+| **10** | **Start the Play closed test** | 3, 4, 9 | The 14 days begin here, not at upload |
+| **11** | **Submit iOS** | 2, 5, 7, 9 | Expect a longer queue than usual: background-location apps draw more scrutiny |
+
+### What sets the date
+
+**The Play tester clock.** Fourteen continuous days from the moment the closed test goes
+live with testers opted in — roughly three weeks to production access once it starts, and it
+has not started. No amount of engineering shortens it, and it runs in parallel with
+everything else, so **the cost of not starting it is a day-for-day slip of the Play date.**
+
+iOS is not on that clock. If the API is deployed and enrolment goes through this week, iOS
+can plausibly be in review before Play testing is halfway.
+
+### Small code items, none blocking
+
+They do not gate a tester build. Fold them in while waiting on the external track.
+
+- **audit §13.2** — geofencing runs a foreground service and samples location with zero
+  enabled reminders. Battery cost and a permanent notification for nothing
+- **audit §13.5** — three `console.log` calls on swallowed error paths, two still `[v0]`
+- A legacy `cachedReminders` key survives logout **and** account deletion —
+  `clearLocalSession()` wipes `proxi_*` only. Deletion completeness is what 5.1.1(v) checks
+- Decide `supportsTablet`, currently `true`. Setting it `false` removes an entire review
+  surface and the iPad screenshots that come with it
+- Reproduce the **address/coordinates mismatch**: an Eti-Osa address reported 536 km away
+  from Eti-Osa. A geofence fires on coordinates, not the label — if the stored point is
+  wrong, the core feature silently does not work. Settle this **before** the device pass, or
+  it will be misread as a device-pass failure
 
 ## Risk Register
 
+Updated 6 September 2026. Struck-through rows are closed; the notes say what actually
+happened, because a risk that fired and was mitigated is worth more than one that never did.
+
+### Live
+
 | Risk | Impact | Mitigation |
 |---|---|---|
-| **SDK 57 upgrade breaks the build** | Day 1 lost, cascades into every other day | Verification gate in §1.1 before any other work; documented fallback to `expo-build-properties` on SDK 54 |
-| NativeWind breaks under RN 0.86 | Every screen loses styling | Check first when diagnosing; 4.2.6 declares no RN ceiling but hooks Babel/Metro |
-| Reanimated 4.1→4.5 / Worklets 0.5→0.10 regressions | Animations break across all screens | Explicit animation check in the §1.1 gate |
-| ~~Backend `DELETE /api/auth/me` not delivered~~ | ~~Blocks iOS submission entirely~~ | **Closed 31 Aug** — endpoint exists and is verified locally |
-| **The API is not deployed** | Blocks *everything* — production cannot even sign in | Railway serves `Application not found`; redeploy the service and re-verify §3.3 against it |
-| Apple enrollment verification delayed | Pushes submission past day 6 | Enroll as individual; have ID ready |
-| Android channel cached from an old install | Alarm settings silently ignored in testing | New channel ID `proxi-alarm-v2` plus delete-old; test on a clean install |
-| Native geocoder autocomplete disappoints | Weakens core flow | `GeocodingProvider` interface makes Google Places a one-file swap |
-| Rejection under Guideline 5.1.5 | Days lost per round trip | Contextual prompts, precise purpose strings, demo video in review notes |
-| Play target-API rule misread | Submission rejected outright | Confirm the required level in Play Console before building |
+| **The API is not deployed** | Blocks *everything* — production cannot even sign in | Railway serves `Application not found` on every route. Redeploy, then re-verify account deletion against production rather than a local instance |
+| **Apple enrolment delayed** | Now blocks **device QA as well as submission** — EAS is configured simulator-only, so there is no route to hardware without it | Enrol as an individual, ID ready. Started today, this is 24–48h; started after the device pass is scheduled, it is the schedule |
+| **Play tester clock has not started** | Sets the Play date outright, day for day | Recruit 15 now, before a build exists. The clock runs in parallel with everything else, so every day not started is a day added to the end |
+| **Nothing has run on hardware** | Every behavioural claim in the audit is implemented and unverified | `release/DEVICE_QA.md`, 63 checks. Background geofencing and notification delivery cannot be checked in a simulator — it will show a notification and tell you nothing about which channel carried it |
+| Android channel cached from an old install | Alarm settings silently ignored during testing | Channels are immutable after creation. Test on a **clean install**; a device that ran a local build after day 2 may still hold a `proxi-alarm-v2` channel with the old chime |
+| Rejection under Guideline 5.1.5 | Days lost per round trip | Contextual prompts, precise purpose strings, demo video in the review notes |
+| Native geocoder autocomplete disappoints | Weakens the core flow | `GeocodingProvider` makes Google Places a one-file swap. **Device check 1.7 decides this** — and the 536 km coordinate mismatch may already be evidence against it |
+
+### Closed
+
+| Risk | What actually happened |
+|---|---|
+| ~~SDK 57 upgrade breaks the build~~ | Landed clean. `tsc` went 8 errors → 0, `expo-doctor` 20/21 → 21/21 |
+| ~~Backend `DELETE /api/auth/me` not delivered~~ | **Closed 31 Aug.** Written and verified end-to-end: hard-deletes the user and their reminders, refuses the old credentials, frees the email. Only deployment remains |
+| ~~Reanimated 4.1→4.5 / Worklets 0.5→0.10 regressions~~ | Not observed once the app actually ran |
+| ~~Play target-API rule misread~~ | Rule took effect 31 Aug; the app has targeted 36 since day 1 |
+| ~~NativeWind breaks under RN 0.86~~ | **Fired — and the register sent us the wrong way.** Every screen did lose its styling, exactly as predicted. But NativeWind was fine: the cause was ours, five screens importing `SafeAreaView` from `react-native` when NativeWind only maps the `react-native-safe-area-context` one, so each page container's `className` was silently dropped (audit §14.6). Had we trusted this row we would have chased a dependency upgrade that fixed nothing. **A predicted symptom is not a diagnosis** |
+
+### Added since the plan was written
+
+| Risk | Impact | Mitigation |
+|---|---|---|
+| **A stale dev client masquerades as a code defect** | Cost a session. The April build was SDK 54 against an SDK 57 bundle and crashed with `ReferenceError: Property 'MessageQueue' doesn't exist` (audit §14.5) | Compare fingerprints before debugging a launch crash: `npx @expo/fingerprint .` against the build's recorded fingerprint. A mismatch means rebuild, not debug |
+| **`className` on an unmapped component fails silently** | No error, no warning, no lint or typecheck signal — only running the app reveals it | When styling vanishes on one component but works on its neighbours, check NativeWind's mapping table before suspecting NativeWind |
+| **Defects that only a running build can expose** | Four found in one session once the app finally ran (§14.6, §14.8, §14.9, §14.10) | Assume more remain. The device pass is where they surface, which is another reason not to leave it last |
 
 ## Explicitly Out of Scope for Launch
 
