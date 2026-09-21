@@ -7,12 +7,23 @@ import { View, TouchableOpacity } from 'react-native';
 
 // The bar is docked to the bottom edge. The add button is centred, which with
 // four tabs puts it in the seam between History and Activity rather than over a
-// label, and FAB_LIFT holds it just clear of the bar's top edge. At three tabs
-// the centre would be a label instead, so this depends on the tab count.
+// label. It sits ON the bar rather than floating above it: FAB_OVERHANG is the
+// only part that rises past the bar's top edge, so the rest overlaps the bar.
+// At three tabs the centre would be a label instead, so this depends on the tab
+// count.
+//
+// FAB_GUTTER is the horizontal space held clear in the middle of the bar. Tab
+// items are flex: 1, so without it the four tabs divide the full width evenly
+// and the inner two crowd the button. Half the gutter goes on the inner edge of
+// History and half on Activity, which shrinks those two items and pushes all
+// four outwards symmetrically. It exceeds FAB_SIZE so the button clears the
+// labels instead of merely not colliding with them, and keeps the two inner tab
+// targets out from under the button.
 const BAR_HEIGHT = 70;
 const BAR_PAD_TOP = 14;
 const FAB_SIZE = 60;
-const FAB_LIFT = 12;
+const FAB_OVERHANG = 16;
+const FAB_GUTTER = FAB_SIZE + 8;
 
 export default function AppLayout() {
   const { isDark } = useTheme();
@@ -57,6 +68,7 @@ export default function AppLayout() {
             title: 'History',
             tabBarLabel: 'History',
             tabBarIcon: ({ color, size }) => <History color={color} size={size} />,
+            tabBarItemStyle: { marginRight: FAB_GUTTER / 2 },
           }}
         />
         <Tabs.Screen
@@ -65,6 +77,7 @@ export default function AppLayout() {
             title: 'Activity',
             tabBarLabel: 'Activity',
             tabBarIcon: ({ color, size }) => <Clock color={color} size={size} />,
+            tabBarItemStyle: { marginLeft: FAB_GUTTER / 2 },
           }}
         />
         <Tabs.Screen
@@ -77,11 +90,12 @@ export default function AppLayout() {
         />
       </Tabs>
 
-      {/* Add reminder, in the History/Activity seam, lifted off the bar. */}
+      {/* Add reminder, in the History/Activity seam, sitting on the bar with
+          only FAB_OVERHANG rising above its top edge. */}
       <View
         style={{
           position: 'absolute',
-          bottom: BAR_HEIGHT + insets.bottom + FAB_LIFT,
+          bottom: insets.bottom + BAR_HEIGHT - FAB_SIZE + FAB_OVERHANG,
           alignSelf: 'center',
           zIndex: 100,
         }}
